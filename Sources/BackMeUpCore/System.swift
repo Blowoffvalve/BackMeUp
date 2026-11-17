@@ -44,6 +44,24 @@ public protocol System {
     /// Shows an alert as a Mac notification.
     func showNotification(_ alert: Alert)
 
+    /// Whether BackMeUp opens at login.
+    func readLoginItemStatus() -> LoginItemStatus
+    /// Adds BackMeUp to Login Items (`SMAppService.mainApp.register()`) and returns the status
+    /// afterwards. macOS may refuse, or want the user's approval.
+    func registerLoginItem() -> LoginItemStatus
+
+    /// Whether BackMeUp may show notifications.
+    func readNotificationPermission() async -> NotificationPermission
+    /// Asks the user to allow notifications, if they haven't been asked, and returns the answer.
+    func requestNotificationPermission() async -> NotificationPermission
+
+    /// Opens a System Settings screen. Returns false if it couldn't be opened.
+    func openSystemSettings(_ pane: SystemSettingsPane) -> Bool
+
+    /// What BackMeUp remembers about setting itself up.
+    func loadSetupState() -> SetupState?
+    func saveSetupState(_ state: SetupState)
+
     /// Settings storage. Values survive app restarts.
     func loadHistory() -> BackupHistory?
     func saveHistory(_ history: BackupHistory)

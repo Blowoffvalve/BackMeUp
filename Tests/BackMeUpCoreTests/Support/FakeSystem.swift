@@ -32,7 +32,8 @@ final class FakeSystem: System {
     var now: Date
     var timeMachineStatus: TimeMachineStatus = .idle
     var destinationInfo: DestinationInfo = .notSetUp
-    var preferences: TimeMachinePreferences?
+    /// Starts with Time Machine's automatic backups off, as the checklist asks.
+    var preferences: TimeMachinePreferences? = TimeMachinePreferences(autoBackup: false, destinations: [])
     var powerSource: PowerSource = .ac
     /// What Time Machine reports about a running backup's progress. Only read while one runs.
     var backupProgress: BackupProgress?
@@ -127,6 +128,48 @@ final class FakeSystem: System {
         notifications.append((now, alert))
     }
 
+    // MARK: Login item, notifications and System Settings
+
+    /// BackMeUp is in Login Items and notifications are allowed, unless a test says otherwise.
+    var loginItemStatus = LoginItemStatus.enabled
+    /// What registering the login item leads to.
+    var loginItemStatusAfterRegistering = LoginItemStatus.enabled
+    private(set) var loginItemRegistrations = 0
+    var notificationPermission = NotificationPermission.allowed
+    /// How the user answers when asked to allow notifications.
+    var notificationAnswer = NotificationPermission.allowed
+    private(set) var notificationPermissionRequests = 0
+    /// Whether System Settings links open. Nothing real is opened either way.
+    var settingsLinksOpen = true
+    private(set) var openedSettings: [SystemSettingsPane] = []
+    var storedSetupState: SetupState?
+
+    func readLoginItemStatus() -> LoginItemStatus { loginItemStatus }
+
+    func registerLoginItem() -> LoginItemStatus {
+        loginItemRegistrations += 1
+        loginItemStatus = loginItemStatusAfterRegistering
+        return loginItemStatus
+    }
+
+    func readNotificationPermission() async -> NotificationPermission { notificationPermission }
+
+    func requestNotificationPermission() async -> NotificationPermission {
+        guard notificationPermission == .notDetermined else { return notificationPermission }
+        notificationPermissionRequests += 1
+        notificationPermission = notificationAnswer
+        return notificationPermission
+    }
+
+    func openSystemSettings(_ pane: SystemSettingsPane) -> Bool {
+        guard settingsLinksOpen else { return false }
+        openedSettings.append(pane)
+        return true
+    }
+
+    func loadSetupState() -> SetupState? { storedSetupState }
+    func saveSetupState(_ state: SetupState) { storedSetupState = state }
+
     func loadHistory() -> BackupHistory? { storedHistory }
     func saveHistory(_ history: BackupHistory) { storedHistory = history }
     func loadSettings() -> BackupSettings? { storedSettings }
@@ -135,8 +178,9 @@ final class FakeSystem: System {
     private func writeResult(_ result: Int?) {
         guard case let .configured(destination) = destinationInfo else { return }
         var preferences = preferences ?? TimeMachinePreferences(autoBackup: false, destinations: [])
+        let encryption = preferences.destination(id: destination.id)?.encryption ?? .encrypted
         preferences.destinations.removeAll { $0.id == destination.id }
-        preferences.destinations.append(.init(id: destination.id, encryption: .encrypted, result: result))
+        preferences.destinations.append(.init(id: destination.id, encryption: encryption, result: result))
         self.preferences = preferences
     }
 }

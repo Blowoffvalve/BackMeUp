@@ -13,6 +13,14 @@ public enum SkipReason: String, Codable, Equatable, Sendable {
     case networkUnidentified
     /// The Mac is on battery and backups on battery are turned off.
     case onBattery
+    /// A required checklist item (automatic backups off, a chosen network for a network disk, or
+    /// one BackMeUp can't check) isn't done. A missing disk is `noDiskSetUp` instead.
+    case setupNotFinished
+
+    /// Whether this skip ends as soon as the checklist allows backups.
+    public var isSetupReason: Bool {
+        self == .noDiskSetUp || self == .setupNotFinished
+    }
 
     /// Whether this skip ends as soon as the Mac is on a chosen network.
     public var isNetworkReason: Bool {
@@ -26,6 +34,7 @@ public enum SkipReason: String, Codable, Equatable, Sendable {
         case .notOnChosenNetwork: "not on a chosen network"
         case .networkUnidentified: "couldn't identify this network"
         case .onBattery: "on battery"
+        case .setupNotFinished: "setup isn't finished"
         }
     }
 
@@ -39,6 +48,7 @@ public enum SkipReason: String, Codable, Equatable, Sendable {
         case .notOnChosenNetwork: "Your Mac hasn't been on a chosen network since \(since)."
         case .networkUnidentified: "BackMeUp hasn't been able to identify your Mac's network since \(since)."
         case .onBattery: "Your Mac has been on battery each time a backup was due since \(since)."
+        case .setupNotFinished: "BackMeUp's setup checklist hasn't been finished. Open it from the menu."
         }
     }
 }

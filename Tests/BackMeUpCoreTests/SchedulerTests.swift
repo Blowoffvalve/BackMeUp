@@ -202,7 +202,8 @@ struct SchedulerTests {
         await harness.start()
 
         #expect(harness.system.startedBackups.isEmpty)
-        #expect(harness.statusLine == "Backup skipped: no Time Machine disk set up")
+        // Check 1 of the checklist fails, so the status line points there.
+        #expect(harness.statusLine == "Finish setting up: see the checklist")
         #expect(harness.scheduler.skipReason == .noDiskSetUp)
     }
 

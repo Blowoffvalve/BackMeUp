@@ -182,8 +182,9 @@ struct NetworkRuleTests {
 
         await harness.start()
 
+        // With no network chosen at all, check 6 of the checklist fails.
         #expect(harness.system.startedBackups.isEmpty)
-        #expect(harness.statusLine == "Waiting for a chosen network")
+        #expect(harness.statusLine == "Finish setting up: see the checklist")
     }
 
     @Test func aRenamedNetworkStillCounts() async {

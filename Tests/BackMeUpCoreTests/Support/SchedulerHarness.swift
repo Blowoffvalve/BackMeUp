@@ -25,6 +25,14 @@ final class SchedulerHarness {
         startDate = start
         system = FakeSystem(now: start)
         scheduler = Self.makeScheduler(system)
+        watchChecklist()
+    }
+
+    /// How many times BackMeUp has shown the checklist window, across restarts.
+    private(set) var checklistShown = 0
+
+    private func watchChecklist() {
+        scheduler.onShowChecklist = { [unowned self] in checklistShown += 1 }
     }
 
     private static func makeScheduler(_ system: FakeSystem) -> Scheduler {
@@ -57,6 +65,7 @@ final class SchedulerHarness {
     /// Quits and relaunches the app: a new Scheduler over the same outside world and storage.
     func restart() async {
         scheduler = Self.makeScheduler(system)
+        watchChecklist()
         await start()
     }
 

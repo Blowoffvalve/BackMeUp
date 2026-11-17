@@ -26,6 +26,14 @@ public final class Scheduler {
     /// The menu's second line: when the next backup is planned.
     public private(set) var nextBackupLine = ""
 
+    /// The first-run checklist as of the last tick or refresh, or nil before the first one.
+    /// Backups are scheduled only while it allows them.
+    public private(set) var checklist: Checklist?
+
+    /// Called when the checklist window should be shown: on first launch, at a launch with check
+    /// 1, 2 or 6 not done, and whenever a check stops passing.
+    public var onShowChecklist: (() -> Void)?
+
     /// Called whenever the menu's lines may have changed, for example when a backup finishes.
     public var onChange: (() -> Void)?
 
@@ -72,8 +80,17 @@ public final class Scheduler {
         timeMachineStatus = await system.readTimeMachineStatus()
         currentNetwork = await system.readNetwork()
         await readProgress()
+        if !setupState.firstRunDone {
+            registerLoginItem()
+        }
+        await readChecklist()
+        if !setupState.firstRunDone {
+            setupState.firstRunDone = true
+            system.saveSetupState(setupState)
+        }
         updateSleepPrevention()
-        if !isBackingUp, timeMachineStatus != .running, system.now >= nextBackupDue || isBackOnAChosenNetwork {
+        if !isBackingUp, timeMachineStatus != .running,
+           system.now >= nextBackupDue || isBackOnAChosenNetwork || isSetupJustFinished {
             startAttempt(byPerson: false)
         }
         checkAlerts()
@@ -85,7 +102,80 @@ public final class Scheduler {
         timeMachineStatus = await system.readTimeMachineStatus()
         currentNetwork = await system.readNetwork()
         await readProgress()
+        await readChecklist()
         describe()
+    }
+
+    // MARK: Checklist
+
+    private lazy var setupState = system.loadSetupState() ?? SetupState()
+    /// The checks that weren't done at the last reading, or nil before the first one since launch.
+    private var previousProblems: Set<ChecklistItem.Check>?
+    /// Checks whose Settings link failed to open, so they show plain-text directions instead.
+    private var linkFailed: Set<ChecklistItem.Check> = []
+
+    /// While no backup has succeeded yet: advice for the long first backup.
+    public var checklistTip: String? {
+        guard history.lastSuccess == nil else { return nil }
+        return "Do your first backup with your Mac plugged in, and at home or with the USB disk attached, so that it has the best chance of finishing."
+    }
+
+    /// Adds BackMeUp to Login Items. Done once on first run; if macOS refuses or wants approval,
+    /// check 4 says how to add it by hand.
+    public func registerLoginItem() {
+        _ = system.registerLoginItem()
+    }
+
+    /// The item's button: asks for notification permission, or opens its System Settings screen.
+    /// If the screen can't be opened, the item shows plain-text directions instead.
+    /// `.openBackMeUpSettings` is left to the app.
+    public func performAction(for check: ChecklistItem.Check) async {
+        if checklist == nil { await readChecklist() }
+        guard let item = checklist?.item(check) else { return }
+        switch item.action {
+        case .allowNotifications:
+            _ = await system.requestNotificationPermission()
+        case let .openSystemSettings(pane):
+            if system.openSystemSettings(pane) {
+                linkFailed.remove(check)
+            } else {
+                linkFailed.insert(check)
+            }
+        case .openBackMeUpSettings:
+            return
+        }
+        await readChecklist()
+        describe()
+    }
+
+    /// Re-reads everything the checklist checks, and asks for the checklist to be shown if
+    /// something needs the user.
+    private func readChecklist() async {
+        let checklist = Checklist(ChecklistInputs(
+            destination: await system.readDestinationInfo(),
+            preferences: await system.readPreferences(),
+            networks: networks,
+            loginItem: system.readLoginItemStatus(),
+            notifications: await system.readNotificationPermission(),
+            linkFailed: linkFailed
+        ))
+        self.checklist = checklist
+        let problems = checklist.problems
+        let shouldShow = if let previousProblems {
+            !problems.subtracting(previousProblems).isEmpty
+        } else {
+            !setupState.firstRunDone || problems.contains { $0.isRequired }
+        }
+        previousProblems = problems
+        if shouldShow { onShowChecklist?() }
+    }
+
+    /// A backup held back by an unfinished checklist starts as soon as the checklist allows it,
+    /// rather than at the next retry, if it was due by the backup interval.
+    private var isSetupJustFinished: Bool {
+        guard let reason = skipReason, reason.isSetupReason, checklist?.allowsBackups == true else { return false }
+        let scheduled = history.lastSuccess.map { settings.backupInterval.date(after: $0, in: calendar) } ?? .distantPast
+        return system.now >= scheduled
     }
 
     // MARK: Networks
@@ -173,6 +263,11 @@ public final class Scheduler {
 
     private func runAttempt(byPerson: Bool) async -> BackupAttempt {
         let started = system.now
+        // Nothing starts, not even Back Up Now, until checks 1, 2 and 6 pass.
+        await readChecklist()
+        if let checklist, let reason = checklist.skipReason {
+            return BackupAttempt(started: started, finished: started, outcome: .skipped(reason))
+        }
         if !byPerson, !settings.allowBackupsOnBattery, system.powerSource == .battery {
             return BackupAttempt(started: started, finished: started, outcome: .skipped(.onBattery))
         }
@@ -346,6 +441,11 @@ public final class Scheduler {
         if isBackingUp || timeMachineStatus == .running {
             statusLine = progressLine
             nextBackupLine = ""
+            return
+        }
+        if checklist?.allowsBackups == false {
+            statusLine = "Finish setting up: see the checklist"
+            nextBackupLine = "Backups start once setup is finished"
             return
         }
         let lastBackup = history.lastSuccess.map { "Last backup: \(format($0))" } ?? "No backups yet"

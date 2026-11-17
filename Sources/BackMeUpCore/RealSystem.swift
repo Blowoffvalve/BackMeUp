@@ -115,7 +115,11 @@ public final class RealSystem: System {
         static let history = "backupHistory"
         static let settings = "backupSettings"
         static let networks = "chosenNetworks"
+        static let setupState = "setupState"
     }
+
+    public func loadSetupState() -> SetupState? { load(Key.setupState) }
+    public func saveSetupState(_ state: SetupState) { save(state, Key.setupState) }
 
     public func loadNetworks() -> NetworkSettings? { load(Key.networks) }
     public func saveNetworks(_ networks: NetworkSettings) { save(networks, Key.networks) }
