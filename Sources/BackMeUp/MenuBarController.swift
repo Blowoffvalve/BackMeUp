@@ -20,6 +20,9 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     )
     private let locationPermission = LocationPermission()
     private lazy var settingsWindow = SettingsWindowController(scheduler: scheduler)
+    private lazy var checklistWindow = ChecklistWindowController(scheduler: scheduler) { [weak self] in
+        self?.openSettings()
+    }
     private var backgroundTimer: Timer?
     private var openMenuTimer: Timer?
     private var isTicking = false
@@ -37,6 +40,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         backUpNowItem.target = self
         let settingsItem = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
         settingsItem.target = self
+        let checklistItem = NSMenuItem(title: "Setup Checklist…", action: #selector(openChecklist), keyEquivalent: "")
+        checklistItem.target = self
         menu.addItem(statusLineItem)
         menu.addItem(nextBackupItem)
         menu.addItem(.separator())
@@ -46,6 +51,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menu.addItem(allowNetworkItem)
         menu.addItem(.separator())
         menu.addItem(backUpNowItem)
+        menu.addItem(checklistItem)
         menu.addItem(settingsItem)
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit BackMeUp", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
@@ -53,6 +59,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         statusItem.menu = menu
 
         scheduler.onChange = { [weak self] in self?.draw() }
+        scheduler.onShowChecklist = { [weak self] in self?.openChecklist() }
         backgroundTimer = makeTimer(every: Scheduler.tickInterval) { [weak self] in self?.tick() }
         tick()
     }
@@ -92,6 +99,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
                 scheduler.allowCurrentNetwork(label: name)
             }
         }
+    }
+
+    @objc private func openChecklist() {
+        checklistWindow.show()
     }
 
     @objc private func openSettings() {
@@ -136,6 +147,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         networkItem.title = scheduler.networkLine
         networkItem.isHidden = scheduler.networkLine.isEmpty
         allowNetworkItem.isHidden = !scheduler.canAllowCurrentNetwork
+        if checklistWindow.isVisible { checklistWindow.reload() }
         drawIcon()
     }
 

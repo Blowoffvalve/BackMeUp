@@ -12,6 +12,9 @@ MainActor.assumeIsolated {
             print(scheduler.statusLine)
             print(scheduler.nextBackupLine)
             print(scheduler.networkLine)
+            for item in scheduler.checklist?.items ?? [] {
+                print("Check \(item.check.rawValue) (\(item.state)): \(item.sentence)")
+            }
             // Also checks that Time Machine's preferences can be read and parsed.
             let preferences = await system.readPreferences()
             print(preferences == nil ? "Can't read Time Machine's preferences" : "Read Time Machine's preferences")
