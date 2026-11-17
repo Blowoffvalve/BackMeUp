@@ -13,6 +13,8 @@ public final class RealSystem: System {
 
     /// The power assertion held while a backup runs on AC power. See `setIdleSleepPrevented`.
     var sleepAssertion: IOPMAssertionID?
+    /// Kept alive for IOKit's power source notifications. See `watchPowerSource`.
+    var powerSourceWatchers: [PowerSourceWatcher] = []
 
     public var now: Date { Date() }
 

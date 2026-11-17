@@ -37,6 +37,9 @@ public protocol System {
     func saveNetworks(_ networks: NetworkSettings)
     /// What the Mac is running on right now.
     var powerSource: PowerSource { get }
+    /// Calls `onChange` on the main actor whenever macOS says the power source may have changed
+    /// (plugged in, unplugged, or the battery level moved), for as long as the app runs.
+    func watchPowerSource(_ onChange: @escaping @MainActor () -> Void)
 
     /// Holds or releases BackMeUp's power assertion that stops the Mac sleeping when idle. Closing
     /// the lid still sleeps it. Calling it again with the same value does nothing.

@@ -61,6 +61,8 @@ public final class Scheduler {
             token: system.loadSecret(.ntfyToken)
         )
         describe()
+        // Unplugging lets the Mac sleep straight away, not at the next tick.
+        self.system.watchPowerSource { [weak self] in self?.updateSleepPrevention() }
     }
 
     /// Whether a backup started by BackMeUp is running.
@@ -375,7 +377,7 @@ public final class Scheduler {
     }
 
     /// Keeps the Mac awake only while BackMeUp's backup runs on AC power. On battery it sleeps as
-    /// normal. Checked again at every tick, so unplugging releases it within a minute.
+    /// normal. Checked again whenever the power source changes, and at every tick.
     private func updateSleepPrevention() {
         system.setIdleSleepPrevented(backupCommandRunning && system.powerSource != .battery)
     }

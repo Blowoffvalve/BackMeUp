@@ -60,6 +60,21 @@ struct PowerTests {
         #expect(harness.system.isPreventingIdleSleep)
     }
 
+    @Test func unpluggingReleasesItStraightAwayWithoutWaitingForATick() async {
+        let harness = harnessWithNetworkDisk(on: .ac)
+        harness.system.nextBackup = .lasting(minutes: 60)
+        await harness.start()
+        await harness.advance(minutes: 10)
+        #expect(harness.system.isPreventingIdleSleep)
+
+        // macOS says the power source changed, between two ticks.
+        harness.system.powerSource = .battery
+        #expect(!harness.system.isPreventingIdleSleep)
+
+        harness.system.powerSource = .ac
+        #expect(harness.system.isPreventingIdleSleep)
+    }
+
     @Test func aBackupOnBatteryNeverKeepsTheMacAwake() async {
         let harness = harnessWithNetworkDisk(on: .battery)
         harness.system.nextBackup = .lasting(minutes: 30)

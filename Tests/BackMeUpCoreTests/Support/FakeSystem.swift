@@ -45,7 +45,16 @@ final class FakeSystem: System {
     var destinationInfo: DestinationInfo = .notSetUp
     /// Starts with Time Machine's automatic backups off, as the checklist asks.
     var preferences: TimeMachinePreferences? = TimeMachinePreferences(autoBackup: false, destinations: [])
-    var powerSource: PowerSource = .ac
+    /// Changing it tells whoever is watching straight away, as macOS's power source
+    /// notification does.
+    var powerSource: PowerSource = .ac {
+        didSet { powerSourceWatchers.forEach { $0() } }
+    }
+    private var powerSourceWatchers: [@MainActor () -> Void] = []
+
+    func watchPowerSource(_ onChange: @escaping @MainActor () -> Void) {
+        powerSourceWatchers.append(onChange)
+    }
     /// What Time Machine reports about a running backup's progress. Only read while one runs.
     var backupProgress: BackupProgress?
     /// Whether BackMeUp is holding its "prevent idle sleep" assertion.
