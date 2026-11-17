@@ -10,6 +10,7 @@ public final class Scheduler {
 
     private let system: any System
     private let calendar: Calendar
+    private var ntfySender: NtfySender { NtfySender(system: system) }
 
     public private(set) var settings: BackupSettings
     public private(set) var history: BackupHistory
@@ -451,7 +452,7 @@ public final class Scheduler {
         case .failed, .overdue: NtfyTag.warning
         case .workingAgain: NtfyTag.success
         }
-        sendNtfy(title: alert.title, body: alert.body, tag: tag) { _ in }
+        ntfySender.send(title: alert.title, body: alert.body, tag: tag, with: ntfy)
     }
 
     // MARK: ntfy
@@ -468,18 +469,7 @@ public final class Scheduler {
     /// The Settings window's "Send test message" button: sends a test message with the saved
     /// ntfy settings, and says whether it worked.
     public func sendTestMessage() async -> NtfyTestResult {
-        guard ntfy.isSetUp else { return .needsTopic }
-        let result = await withCheckedContinuation { continuation in
-            sendNtfy(
-                title: "BackMeUp test message",
-                body: "Phone alerts from BackMeUp will arrive here.",
-                tag: .success
-            ) { continuation.resume(returning: $0) }
-        }
-        switch result {
-        case .sent: return .sent
-        case let .failed(reason): return .failed(reason)
-        }
+        await ntfySender.sendTestMessage(with: ntfy)
     }
 
     /// Whether the "First backup finished" message is being sent right now.
@@ -492,10 +482,11 @@ public final class Scheduler {
               let lastSuccess = history.attempts.first(where: { $0.outcome == .succeeded })?.finished ?? history.lastSuccess
         else { return }
         sendingFirstBackupMessage = true
-        sendNtfy(
+        ntfySender.send(
             title: "First backup finished",
             body: "Your Mac's first backup finished \(format(lastSuccess)).",
-            tag: .success
+            tag: .success,
+            with: ntfy
         ) { [weak self] result in
             guard let self else { return }
             sendingFirstBackupMessage = false
@@ -504,27 +495,6 @@ public final class Scheduler {
                 system.saveHistory(history)
             }
         }
-    }
-
-    /// Sends a message through ntfy if it's set up. Never waits for it.
-    private func sendNtfy(title: String, body: String, tag: NtfyTag, completion: @escaping @MainActor (NtfySendResult) -> Void) {
-        guard ntfy.isSetUp else { return }
-        let message = NtfyMessage(settings: ntfy, title: title, body: body, tags: [tag])
-        system.sendNtfy(message) { [weak self] result in
-            if case let .failed(reason) = result, let self {
-                system.log("Couldn't send the \"\(title)\" phone alert through ntfy: \(redacted(reason, message))")
-            }
-            completion(result)
-        }
-    }
-
-    /// The text with the message's topic and token blanked out, so neither reaches the log.
-    private func redacted(_ text: String, _ message: NtfyMessage) -> String {
-        var text = text
-        for secret in [message.settings.topic, message.settings.token ?? ""] where !secret.isEmpty {
-            text = text.replacingOccurrences(of: secret, with: "[hidden]")
-        }
-        return text
     }
 
     // MARK: Progress
@@ -550,26 +520,6 @@ public final class Scheduler {
         return (1 - progress.fraction) * elapsed / (progress.fraction - start.fraction)
     }
 
-    /// "First backup: 35%, about 3 hours left", or "Backing up now" before Time Machine says.
-    private var progressLine: String {
-        guard let progress else { return "Backing up now" }
-        let label = history.lastSuccess == nil ? "First backup" : "Backing up"
-        let percent = "\(label): \(Int(progress.fraction * 100))%"
-        return timeLeft.map { "\(percent), \(Self.describe(timeLeft: $0))" } ?? percent
-    }
-
-    /// "less than a minute left", "about 45 minutes left", "about 3 hours left", "about 3 days left".
-    private static func describe(timeLeft seconds: TimeInterval) -> String {
-        func about(_ count: Double, _ unit: String) -> String {
-            let count = Int(count.rounded())
-            return "about \(count) \(unit)\(count == 1 ? "" : "s") left"
-        }
-        if seconds < 60 { return "less than a minute left" }
-        if (seconds / 60).rounded() < 60 { return about(seconds / 60, "minute") }
-        if (seconds / 3600).rounded() < 48 { return about(max(1, seconds / 3600), "hour") }
-        return about(seconds / 86400, "day")
-    }
-
     // MARK: Describing it for the menu
 
     private func describe() {
@@ -578,75 +528,24 @@ public final class Scheduler {
     }
 
     private func updateLines() {
-        updateNetworkLine()
-        if isBackingUp || timeMachineStatus == .running {
-            statusLine = progressLine
-            nextBackupLine = ""
-            return
-        }
-        if checklist?.allowsBackups == false {
-            statusLine = "Finish setting up: see the checklist"
-            nextBackupLine = "Backups start once setup is finished"
-            return
-        }
-        let lastBackup = history.lastSuccess.map { "Last backup: \(format($0))" } ?? "No backups yet"
-        switch history.attempts.last?.outcome {
-        case let .failed(reason)?:
-            statusLine = "Last backup failed: \(reason.description)"
-        case .skipped(.notOnChosenNetwork)?:
-            statusLine = "Waiting for a chosen network"
-        case let .skipped(reason)?:
-            statusLine = "Backup skipped: \(reason.description)"
-        case .paused?:
-            statusLine = "First backup paused"
-        case .succeeded?, nil:
-            statusLine = lastBackup
-        }
-        let due = nextBackupDue
-        let lastOutcome = history.attempts.last?.outcome ?? .succeeded
-        let label = switch lastOutcome {
-        case .succeeded: "Next backup"
-        case .paused: "Resumes"
-        case .failed, .skipped: "Next try"
-        }
-        nextBackupLine = due <= system.now ? "\(label): now" : "\(label): \(format(due))"
-    }
-
-    private func updateNetworkLine() {
-        switch currentNetwork {
-        case nil:
-            networkLine = ""
-        case .none?:
-            networkLine = "Network: not connected"
-        case .routerAddressUnknown?:
-            networkLine = "Network: not identified yet"
-        case let .router(address, wifiName)?:
-            let chosen = networks.network(routerAddress: address)
-            let label = chosen?.label ?? wifiName ?? "this network"
-            let state = if chosen != nil { "backups allowed" }
-                else if networks.allNetworks { "all networks allowed" }
-                else { "not chosen" }
-            networkLine = "Network: \(label) (\(state))"
-        }
+        let text = MenuText(
+            history: history,
+            nextBackupDue: nextBackupDue,
+            isBackingUp: isBackingUp || timeMachineStatus == .running,
+            progress: progress,
+            timeLeft: timeLeft,
+            isWaitingForSetup: checklist?.allowsBackups == false,
+            currentNetwork: currentNetwork,
+            networks: networks,
+            dates: RelativeDate(now: system.now, calendar: calendar)
+        )
+        statusLine = text.statusLine
+        nextBackupLine = text.nextBackupLine
+        networkLine = text.networkLine
     }
 
     /// "today 14:02", "yesterday 09:15", "tomorrow 14:02", or "3 Jan 14:02".
     private func format(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.calendar = calendar
-        formatter.timeZone = calendar.timeZone
-        formatter.dateFormat = "HH:mm"
-        let time = formatter.string(from: date)
-        let today = calendar.startOfDay(for: system.now)
-        let days = calendar.dateComponents([.day], from: today, to: calendar.startOfDay(for: date)).day ?? 0
-        switch days {
-        case 0: return "today \(time)"
-        case -1: return "yesterday \(time)"
-        case 1: return "tomorrow \(time)"
-        default:
-            formatter.dateFormat = "d MMM HH:mm"
-            return formatter.string(from: date)
-        }
+        RelativeDate(now: system.now, calendar: calendar).describe(date)
     }
 }
