@@ -1,5 +1,6 @@
 #!/bin/sh
-# Tests scripts/release.sh from the outside: runs it the way the maintainer would and checks the zip.
+# Tests scripts/release.sh from the outside: runs it the way the maintainer would and checks the zip
+# and the appcast.
 # Slow (it does a full universal release build), so it isn't part of scripts/test.sh.
 set -u
 cd "$(dirname "$0")/.."
@@ -22,10 +23,37 @@ if [ -d build/release ] && [ -n "$(find build/release -name '*.zip' -newer "$tmp
     fail "a rejected run made a zip"
 fi
 
-# --- A valid version makes build/release/BackMeUp-VERSION.zip holding a versioned app ---
+# --- Refuses to sign while Packaging/Info.plist has the placeholder update key ---
 version=9.8.7
-zip=build/release/BackMeUp-$version.zip
-rm -f "$zip"
+if [ "$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' Packaging/Info.plist)" = REPLACE_WITH_SPARKLE_PUBLIC_ED_KEY ]; then
+    rm -f "build/release/BackMeUp-$version.zip"
+    out=$(scripts/release.sh "$version" 2>&1)
+    if [ $? -eq 0 ]; then fail "released with the placeholder key"; else pass "refuses the placeholder key"; fi
+    case "$out" in *SUPublicEDKey*docs/releasing.md*) pass "says how to add the key" ;; *) fail "unclear refusal: $out" ;; esac
+    if [ -e "build/release/BackMeUp-$version.zip" ]; then fail "made a zip with the placeholder key"; fi
+else
+    echo "skip: Packaging/Info.plist already has a real key, so the placeholder refusal can't be tested here"
+fi
+
+# --- With a key, a valid version makes a versioned app zip, signed, and an appcast ---
+# Everything runs in a copy of the repo with a throwaway key pair, so neither the real
+# Info.plist nor the Keychain is touched. The private key is deleted with $tmp.
+mkdir "$tmp/repo" "$tmp/scripts"
+rsync -a --exclude .git --exclude .build --exclude build ./ "$tmp/repo/"
+cat > "$tmp/scripts/make-key.swift" <<'SWIFT'
+import CryptoKit
+import Foundation
+// Writes a private key file the way Sparkle's generate_keys -x does (the base64 seed), and
+// prints the public key.
+let key = Curve25519.Signing.PrivateKey()
+try key.rawRepresentation.base64EncodedString().write(toFile: CommandLine.arguments[1], atomically: true, encoding: .utf8)
+print(key.publicKey.rawRepresentation.base64EncodedString())
+SWIFT
+public_key=$(swift "$tmp/scripts/make-key.swift" "$tmp/private-key")
+/usr/libexec/PlistBuddy -c "Set :SUPublicEDKey $public_key" "$tmp/repo/Packaging/Info.plist"
+
+zip=$tmp/repo/build/release/BackMeUp-$version.zip
+appcast=$tmp/repo/build/release/appcast.xml
 # Stand-ins for the tools that could publish something. gh and curl must never run; git may run,
 # but never to push or tag. Each logs its call so the checks below can see it.
 mkdir "$tmp/bin"
@@ -38,7 +66,7 @@ chmod +x "$tmp/bin"/*
 touch "$tmp/calls.log"
 tags_before=$(git tag; git ls-remote --tags origin 2>/dev/null)
 
-if PATH="$tmp/bin:$PATH" scripts/release.sh "$version" >"$tmp/release.log" 2>&1; then
+if PATH="$tmp/bin:$PATH" SPARKLE_ED_KEY_FILE="$tmp/private-key" "$tmp/repo/scripts/release.sh" "$version" >"$tmp/release.log" 2>&1; then
     pass "release.sh $version succeeded"
 else
     cat "$tmp/release.log"
@@ -69,9 +97,58 @@ if [ -f "$zip" ]; then
     # codesign shows it as a flag, such as flags=0x10002(adhoc,runtime).
     flags=$(echo "$details" | sed -n 's/.*flags=[^(]*(\([^)]*\)).*/\1/p')
     case ",$flags," in *,runtime,*|*library-validation*) fail "hardened runtime is on: flags $flags" ;; *) pass "no hardened runtime (flags $flags)" ;; esac
+
+    sparkle=$app/Contents/Frameworks/Sparkle.framework
+    if [ -f "$sparkle/Versions/B/Sparkle" ]; then pass "Sparkle.framework is embedded"; else fail "no Sparkle.framework in Contents/Frameworks"; fi
+    if otool -l "$app/Contents/MacOS/BackMeUp" | grep -q "path @executable_path/../Frameworks"; then
+        pass "the binary looks in Contents/Frameworks"
+    else
+        fail "no @executable_path/../Frameworks rpath"
+    fi
+    for code in "$sparkle/Versions/B/Autoupdate" "$sparkle/Versions/B/Updater.app" "$sparkle"; do
+        case "$(codesign -d --verbose=2 "$code" 2>&1)" in
+            *runtime*) fail "hardened runtime is on for $code" ;;
+            *) pass "no hardened runtime for ${code#$app/}" ;;
+        esac
+    done
+    got=$(/usr/libexec/PlistBuddy -c "Print :SUPublicEDKey" "$app/Contents/Info.plist" 2>&1)
+    if [ "$got" = "$public_key" ]; then pass "the app carries the public key"; else fail "SUPublicEDKey is '$got'"; fi
 else
     fail "no $zip"
 fi
+
+# The appcast offers this version from its GitHub release, signed with the key.
+if [ -f "$appcast" ]; then
+    pass "made appcast.xml"
+    enclosure=$(grep '<enclosure' "$appcast")
+    attr() { echo "$enclosure" | sed -n "s/.* $1=\"\([^\"]*\)\".*/\1/p"; }
+    url=$(attr url)
+    expected_url="https://github.com/Blowoffvalve/BackMeUp/releases/download/v$version/BackMeUp-$version.zip"
+    if [ "$url" = "$expected_url" ]; then pass "download URL is the release's zip"; else fail "download URL is '$url'"; fi
+    if grep -q "<sparkle:version>$version</sparkle:version>" "$appcast"; then pass "appcast version is $version"; else fail "no sparkle:version $version in the appcast"; fi
+    length=$(attr length)
+    if [ "$length" = "$(stat -f %z "$zip" 2>/dev/null)" ]; then pass "length matches the zip"; else fail "length '$length' doesn't match the zip"; fi
+    signature=$(attr 'sparkle:edSignature')
+    if [ -n "$signature" ] && swift scripts/verify-update-signature.swift "$public_key" "$signature" "$zip"; then
+        pass "the zip's EdDSA signature checks out against the public key"
+    else
+        fail "bad or missing EdDSA signature '$signature'"
+    fi
+    if [ "$(grep -c '<item>' "$appcast")" -eq 1 ]; then pass "the appcast has one item"; else fail "the appcast has $(grep -c '<item>' "$appcast") items"; fi
+else
+    fail "no appcast.xml"
+fi
+
+# --- Refuses a private key that doesn't match the app's public key ---
+# generate_appcast only warns about that, but users' copies would reject every such update.
+other_key=$(swift "$tmp/scripts/make-key.swift" "$tmp/other-private-key")
+/usr/libexec/PlistBuddy -c "Set :SUPublicEDKey $other_key" "$tmp/repo/Packaging/Info.plist"
+if PATH="$tmp/bin:$PATH" SPARKLE_ED_KEY_FILE="$tmp/private-key" "$tmp/repo/scripts/release.sh" "$version" >"$tmp/mismatch.log" 2>&1; then
+    fail "released with a private key that doesn't match SUPublicEDKey"
+else
+    pass "refuses a private key that doesn't match SUPublicEDKey"
+fi
+if [ -e "$appcast" ]; then fail "left an appcast signed with the wrong key"; else pass "no appcast with the wrong key"; fi
 
 # --- Never uploads, pushes or tags ---
 if grep -Eq '^(gh|curl)|^git (push|tag)' "$tmp/calls.log"; then

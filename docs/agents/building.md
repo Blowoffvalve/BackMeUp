@@ -5,9 +5,9 @@ Everything builds with the Command Line Tools alone (`xcode-select --install`). 
 ## Commands
 
 - **Test:** `scripts/test.sh`. Extra arguments go to `swift test`, for example `scripts/test.sh --filter StatusLine`.
-- **Build the app:** `scripts/build-app.sh`. It makes `build/BackMeUp.app`: a universal (arm64 and x86_64) release build for macOS 14+, ad-hoc signed, with no hardened runtime.
+- **Build the app:** `scripts/build-app.sh`. It makes `build/BackMeUp.app`: a universal (arm64 and x86_64) release build for macOS 14+, ad-hoc signed, with no hardened runtime. Sparkle.framework (for updates) is embedded in `Contents/Frameworks` without its XPC services and re-signed the same way.
 - **Check the live Time Machine reading:** `build/BackMeUp.app/Contents/MacOS/BackMeUp --print-status` prints the menu's status lines, the six checklist checks and whether Time Machine's preferences could be read, then exits. It never starts a backup, registers the login item or opens anything.
-- **Make a release zip:** `scripts/release.sh 1.2.0` makes `build/release/BackMeUp-1.2.0.zip` with both version fields set to `1.2.0`. `scripts/build-app.sh 1.2.0` sets the version without zipping. `scripts/test-release.sh` tests the release script (slow: a full release build). Agents must never upload, push tags or publish releases; see `docs/releasing.md` for the maintainer's manual step.
+- **Make a release:** `scripts/release.sh 1.2.0` makes `build/release/BackMeUp-1.2.0.zip` with both version fields set to `1.2.0`, signs it with the Sparkle key and writes `build/release/appcast.xml`. It refuses to run while `SUPublicEDKey` in `Packaging/Info.plist` is the placeholder; the maintainer adds the real key (`docs/releasing.md`). `scripts/build-app.sh 1.2.0` sets the version without zipping. `scripts/test-release.sh` tests the release script (slow: two release builds) in a copy of the repo, with a throwaway key it makes with CryptoKit. Never run Sparkle's `generate_keys` bare: it writes to the login Keychain. Agents must never upload, push tags or publish releases; see `docs/releasing.md` for the maintainer's manual step.
 - **Run it:** `open build/BackMeUp.app`. It's menu bar-only (`LSUIElement`), so look for the icon in the menu bar, not the Dock. **Running the app starts real Time Machine backups** (`tmutil startbackup`) whenever one is due, and straight away on first launch once checklist checks 1, 2 and 6 pass, so don't run it on a Mac where that isn't wanted.
 
 ## Layout
@@ -15,12 +15,12 @@ Everything builds with the Command Line Tools alone (`xcode-select --install`). 
 | Path | What's there |
 |---|---|
 | `Sources/BackMeUpCore` | Everything testable: the System port (`System.swift`), the real adapter (`RealSystem.swift`), output parsers and the `Scheduler` |
-| `Sources/BackMeUp` | The menu bar app. Thin: it ticks the scheduler on a timer and draws what it says. The Settings window is plain AppKit |
+| `Sources/BackMeUp` | The menu bar app. Thin: it ticks the scheduler on a timer and draws what it says. The Settings window is plain AppKit. `AppUpdater` wraps Sparkle, the only target that links it |
 | `Tests/BackMeUpCoreTests` | Swift Testing tests |
 | `Tests/BackMeUpCoreTests/Support` | `FakeSystem` and `SchedulerHarness`, the main test point |
 | `Tests/BackMeUpCoreTests/Fixtures` | Saved command output for parser tests. Its README says where each file came from |
-| `Packaging/Info.plist` | The bundle's Info.plist, copied in by `build-app.sh`. Its version is a placeholder; releases set it |
-| `scripts/` | `test.sh`, `build-app.sh`, `release.sh` and `test-release.sh` |
+| `Packaging/Info.plist` | The bundle's Info.plist, copied in by `build-app.sh`. Its version is a placeholder; releases set it. It also holds Sparkle's settings: the feed URL, a daily check and `SUPublicEDKey`, a placeholder until the maintainer adds the real key |
+| `scripts/` | `test.sh`, `build-app.sh`, `release.sh`, `test-release.sh` and `verify-update-signature.swift` (checks an update's EdDSA signature with CryptoKit) |
 
 ## Writing tests
 
@@ -36,6 +36,8 @@ Everything builds with the Command Line Tools alone (`xcode-select --install`). 
 ## Toolchain quirks
 
 - Run tests with `scripts/test.sh`, not bare `swift test`. With the Command Line Tools, the compiler's in-process macro loader fails at random, about one build in four, with `plugin for module 'TestingMacros' not found` on every `@Test`, `@Suite` and `#expect`. The script loads the macros through the out-of-process `swift-plugin-server` instead. Bare `swift test` still works if you retry.
+- Sparkle's tools (`generate_appcast`, `sign_update`, `generate_keys`) come with the Sparkle package, in `.build/artifacts/sparkle/Sparkle/bin` after `swift package resolve`.
+- Updates: the scheduler spots the first launch after an update by comparing `system.appVersion` with `SetupState.lastLaunchedVersion`. In tests, change `system.appVersion` before `harness.restart()`.
 - `swift build --build-system native` can't find the `Testing` module. Use the default build system.
 - `ld: warning: search path ... not found` lines during builds are harmless.
 - SwiftUI's `@State` (and other SwiftUI macros) can't be used: the Command Line Tools ship no `SwiftUIMacros` plugin. Build windows with AppKit.

@@ -14,8 +14,15 @@ $build --product BackMeUp
 binary="$($build --show-bin-path)/BackMeUp"
 
 rm -rf "$app"
-mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
+mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources" "$app/Contents/Frameworks"
 cp "$binary" "$app/Contents/MacOS/BackMeUp"
+# The binary looks for Sparkle.framework next to itself; in the bundle it's in Contents/Frameworks.
+install_name_tool -add_rpath @executable_path/../Frameworks "$app/Contents/MacOS/BackMeUp"
+
+# Sparkle, for in-app updates. Its XPC services are only for sandboxed apps, so they're left out.
+sparkle=$app/Contents/Frameworks/Sparkle.framework
+ditto "$(dirname "$binary")/Sparkle.framework" "$sparkle"
+rm -rf "$sparkle/XPCServices" "$sparkle/Versions/B/XPCServices"
 cp Packaging/Info.plist "$app/Contents/Info.plist"
 if [ $# -ge 1 ]; then
     # Sparkle compares CFBundleVersion between releases, so it gets the same dotted version.
@@ -25,8 +32,12 @@ fi
 plutil -lint -s "$app/Contents/Info.plist"
 
 # Ad-hoc signature ("-"), no hardened runtime: the spec needs library validation off so the
-# ad-hoc signed app can later load the Sparkle framework.
+# ad-hoc signed app can load the Sparkle framework. Sparkle ships with the runtime on, so its
+# parts are re-signed the same way, inside out, before the app itself.
+for code in "$sparkle/Versions/B/Autoupdate" "$sparkle/Versions/B/Updater.app" "$sparkle"; do
+    codesign --force --sign - --timestamp=none "$code"
+done
 codesign --force --sign - --timestamp=none "$app"
-codesign --verify --strict "$app"
+codesign --verify --strict --deep "$app"
 
 echo "Built $app"
