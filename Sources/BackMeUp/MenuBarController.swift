@@ -54,6 +54,9 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menu.addItem(checklistItem)
         menu.addItem(settingsItem)
         menu.addItem(.separator())
+        let uninstallItem = NSMenuItem(title: "Uninstall…", action: #selector(uninstall), keyEquivalent: "")
+        uninstallItem.target = self
+        menu.addItem(uninstallItem)
         menu.addItem(NSMenuItem(title: "Quit BackMeUp", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         menu.delegate = self
         statusItem.menu = menu
@@ -107,6 +110,12 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     @objc private func openSettings() {
         settingsWindow.show()
+    }
+
+    @objc private func uninstall() {
+        UninstallFlow.run(scheduler: scheduler) { [statusItem] in
+            NSStatusBar.system.removeStatusItem(statusItem)
+        }
     }
 
     // MARK: Refreshing

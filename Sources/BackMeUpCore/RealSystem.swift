@@ -118,6 +118,21 @@ public final class RealSystem: System {
         static let setupState = "setupState"
     }
 
+    /// Every `UserDefaults` key BackMeUp itself writes.
+    static let settingsKeys = [Key.history, Key.settings, Key.networks, Key.setupState, ntfyServerKey]
+
+    /// Removes BackMeUp's keys one by one (which also covers a bare binary run outside the app
+    /// bundle), then its whole defaults domain, which also holds anything AppKit or a framework
+    /// saved for it.
+    public func deleteAllSettings() {
+        let defaults = UserDefaults.standard
+        for key in Self.settingsKeys { defaults.removeObject(forKey: key) }
+        if let domain = Bundle.main.bundleIdentifier {
+            defaults.removePersistentDomain(forName: domain)
+        }
+        defaults.synchronize()
+    }
+
     public func loadSetupState() -> SetupState? { load(Key.setupState) }
     public func saveSetupState(_ state: SetupState) { save(state, Key.setupState) }
 

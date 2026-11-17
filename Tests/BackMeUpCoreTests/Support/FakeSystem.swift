@@ -135,6 +135,7 @@ final class FakeSystem: System {
     /// What registering the login item leads to.
     var loginItemStatusAfterRegistering = LoginItemStatus.enabled
     private(set) var loginItemRegistrations = 0
+    private(set) var loginItemUnregistrations = 0
     var notificationPermission = NotificationPermission.allowed
     /// How the user answers when asked to allow notifications.
     var notificationAnswer = NotificationPermission.allowed
@@ -150,6 +151,11 @@ final class FakeSystem: System {
         loginItemRegistrations += 1
         loginItemStatus = loginItemStatusAfterRegistering
         return loginItemStatus
+    }
+
+    func unregisterLoginItem() {
+        loginItemUnregistrations += 1
+        loginItemStatus = .notRegistered
     }
 
     func readNotificationPermission() async -> NotificationPermission { notificationPermission }
@@ -197,6 +203,15 @@ final class FakeSystem: System {
     func saveHistory(_ history: BackupHistory) { storedHistory = history }
     func loadSettings() -> BackupSettings? { storedSettings }
     func saveSettings(_ settings: BackupSettings) { storedSettings = settings }
+
+    /// Empties settings storage, as removing BackMeUp's `UserDefaults` does. Leaves the Keychain.
+    func deleteAllSettings() {
+        storedHistory = nil
+        storedSettings = nil
+        storedNetworks = nil
+        storedSetupState = nil
+        storedNtfyServer = nil
+    }
 
     private func writeResult(_ result: Int?) {
         guard case let .configured(destination) = destinationInfo else { return }

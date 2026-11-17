@@ -84,6 +84,7 @@ public final class Scheduler {
 
     /// Called by the app's timer, and by the test harness at each step of simulated time.
     public func tick() async {
+        guard !isUninstalled else { return }
         timeMachineStatus = await system.readTimeMachineStatus()
         currentNetwork = await system.readNetwork()
         await readProgress()
@@ -106,6 +107,7 @@ public final class Scheduler {
 
     /// Re-reads Time Machine's state for the menu without ever starting a backup.
     public func refreshStatus() async {
+        guard !isUninstalled else { return }
         timeMachineStatus = await system.readTimeMachineStatus()
         currentNetwork = await system.readNetwork()
         await readProgress()
@@ -130,6 +132,7 @@ public final class Scheduler {
     /// Adds BackMeUp to Login Items. Done once on first run; if macOS refuses or wants approval,
     /// check 4 says how to add it by hand.
     public func registerLoginItem() {
+        guard !isUninstalled else { return }
         _ = system.registerLoginItem()
     }
 
@@ -203,6 +206,7 @@ public final class Scheduler {
     /// "Allow backups on this network": adds the current network under `label`. Does nothing if
     /// it can't be identified or is already chosen. A backup waiting for it starts at the next tick.
     public func allowCurrentNetwork(label: String) {
+        guard !isUninstalled else { return }
         guard canAllowCurrentNetwork, case let .router(address, _)? = currentNetwork else { return }
         networks.chosen.append(ChosenNetwork(routerAddress: address, label: label))
         system.saveNetworks(networks)
@@ -211,6 +215,7 @@ public final class Scheduler {
 
     /// Saves chosen networks (renamed or removed in Settings) and the "all networks" switch.
     public func updateNetworks(_ newNetworks: NetworkSettings) {
+        guard !isUninstalled else { return }
         networks = newNetworks
         system.saveNetworks(networks)
         describe()
@@ -230,14 +235,44 @@ public final class Scheduler {
     /// one BackMeUp started is still running. It runs on battery even when scheduled backups on
     /// battery are off.
     public func backUpNow() {
+        guard !isUninstalled else { return }
         startAttempt(byPerson: true)
     }
 
     /// Called as the app quits: lets the Mac sleep again. Time Machine carries on with any backup
     /// already running.
+    /// After Uninstall…, it deletes the settings once more, in case macOS or a framework saved
+    /// something for BackMeUp while the reminder was showing.
     public func prepareToQuit() {
         backupCommandRunning = false
         updateSleepPrevention()
+        if isUninstalled { system.deleteAllSettings() }
+    }
+
+    // MARK: Uninstall
+
+    /// Whether Uninstall… has run. From then on BackMeUp starts no backups, sends no alerts and
+    /// saves nothing, while the app shows its reminder and quits.
+    public private(set) var isUninstalled = false
+
+    /// Uninstall…: removes BackMeUp from Login Items and deletes its settings and every Keychain
+    /// item it made. Time Machine's settings and backups are never touched.
+    public func uninstall() {
+        isUninstalled = true
+        backupCommandRunning = false
+        updateSleepPrevention()
+        system.unregisterLoginItem()
+        system.deleteAllSettings()
+        for secret in Secret.allCases {
+            system.saveSecret(nil, as: secret)
+        }
+    }
+
+    /// The uninstall reminder's button: opens Time Machine settings so the user can turn its
+    /// automatic backups back on. Returns false if it couldn't be opened; the reminder then shows
+    /// `Uninstall.reminderDirections`. Only opens the screen; it changes nothing there.
+    public func openTimeMachineSettings() -> Bool {
+        system.openSystemSettings(.timeMachine)
     }
 
     /// Waits until the backup BackMeUp started, if any, has finished and been recorded.
@@ -247,6 +282,7 @@ public final class Scheduler {
 
     /// Saves new settings, raised to the minimums.
     public func updateSettings(_ newSettings: BackupSettings) {
+        guard !isUninstalled else { return }
         settings = newSettings.validated
         system.saveSettings(settings)
         describe()
@@ -259,6 +295,11 @@ public final class Scheduler {
         guard backupTask == nil else { return }
         backupTask = Task {
             let attempt = await runAttempt(byPerson: byPerson)
+            // Uninstalled while Time Machine ran: Time Machine carries on, but nothing is recorded.
+            guard !isUninstalled else {
+                backupTask = nil
+                return
+            }
             let isFirstSuccess = history.lastSuccess == nil && attempt.outcome == .succeeded
             history.record(attempt)
             if isFirstSuccess, ntfy.isSetUp { history.firstBackupMessagePending = true }
@@ -370,6 +411,7 @@ public final class Scheduler {
 
     /// Sends an alert if one is due, or "working again" on the first success after an alert.
     private func checkAlerts() {
+        guard !isUninstalled else { return }
         if history.lastAlertSent != nil, let lastSuccess = history.lastSuccess,
            history.attempts.last?.outcome == .succeeded {
             history.lastAlertSent = nil
@@ -404,6 +446,7 @@ public final class Scheduler {
 
     /// Saves where phone alerts go. The topic and token go to the Keychain.
     public func updateNtfy(_ newSettings: NtfySettings) {
+        guard !isUninstalled else { return }
         ntfy = newSettings.cleaned
         system.saveNtfyServer(ntfy.server)
         system.saveSecret(ntfy.isSetUp ? ntfy.topic : nil, as: .ntfyTopic)
@@ -444,7 +487,7 @@ public final class Scheduler {
         ) { [weak self] result in
             guard let self else { return }
             sendingFirstBackupMessage = false
-            if result == .sent {
+            if result == .sent, !isUninstalled {
                 history.firstBackupMessagePending = nil
                 system.saveHistory(history)
             }

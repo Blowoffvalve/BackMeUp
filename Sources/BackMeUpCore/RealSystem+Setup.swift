@@ -19,6 +19,12 @@ extension RealSystem {
         return readLoginItemStatus()
     }
 
+    public func unregisterLoginItem() {
+        guard Bundle.main.bundleIdentifier != nil else { return }
+        // Throws when it was never registered; there's nothing to remove then.
+        try? SMAppService.mainApp.unregister()
+    }
+
     // MARK: Notifications
 
     public func readNotificationPermission() async -> NotificationPermission {

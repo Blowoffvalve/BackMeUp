@@ -49,6 +49,8 @@ public protocol System {
     /// Adds BackMeUp to Login Items (`SMAppService.mainApp.register()`) and returns the status
     /// afterwards. macOS may refuse, or want the user's approval.
     func registerLoginItem() -> LoginItemStatus
+    /// Removes BackMeUp from Login Items (`SMAppService.mainApp.unregister()`), for Uninstall….
+    func unregisterLoginItem()
 
     /// Whether BackMeUp may show notifications.
     func readNotificationPermission() async -> NotificationPermission
@@ -81,4 +83,8 @@ public protocol System {
     func saveHistory(_ history: BackupHistory)
     func loadSettings() -> BackupSettings?
     func saveSettings(_ settings: BackupSettings)
+
+    /// Deletes everything BackMeUp keeps in settings storage (all of its `UserDefaults`), for
+    /// Uninstall…. Secrets in the Keychain are deleted separately, through `saveSecret(nil, as:)`.
+    func deleteAllSettings()
 }
