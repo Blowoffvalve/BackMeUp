@@ -16,6 +16,8 @@ public enum SkipReason: String, Codable, Equatable, Sendable {
     public var isNetworkReason: Bool {
         self == .notOnChosenNetwork || self == .networkUnidentified
     }
+    /// The Mac is on battery and backups on battery are turned off.
+    case onBattery
 
     public var description: String {
         switch self {
@@ -23,6 +25,7 @@ public enum SkipReason: String, Codable, Equatable, Sendable {
         case .diskNotConnected: "backup disk not connected"
         case .notOnChosenNetwork: "not on a chosen network"
         case .networkUnidentified: "couldn't identify this network"
+        case .onBattery: "on battery"
         }
     }
 }
@@ -53,6 +56,9 @@ public struct BackupAttempt: Codable, Equatable, Sendable {
         case succeeded
         case failed(FailureReason)
         case skipped(SkipReason)
+        /// The first backup stopped before finishing, with no error result. Not a failure: it
+        /// resumes at the next try.
+        case paused
     }
 
     public var started: Date

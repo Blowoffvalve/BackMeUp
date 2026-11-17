@@ -15,10 +15,17 @@ final class FakeSystem: System {
         var minutes: Double = 20
         /// Whether Time Machine's preferences can't be read once the backup ends.
         var preferencesUnreadableAfterwards = false
+        /// Whether the backup stays running while `SchedulerHarness` moves the clock, so the test
+        /// can look at the Mac mid-backup. Otherwise the clock jumps straight to its end.
+        var runsWhileTimePasses = false
 
         static let succeeds = ScriptedBackup()
         static func fails(exitCode: Int32? = 0, result: Int? = 0, minutes: Double = 20) -> ScriptedBackup {
             ScriptedBackup(exitCode: exitCode, result: result, minutes: minutes)
+        }
+        /// A backup that keeps running for `minutes` of simulated time, then ends as scripted.
+        static func lasting(minutes: Double, exitCode: Int32? = 0, result: Int? = 0) -> ScriptedBackup {
+            ScriptedBackup(exitCode: exitCode, result: result, minutes: minutes, runsWhileTimePasses: true)
         }
     }
 
@@ -26,6 +33,11 @@ final class FakeSystem: System {
     var timeMachineStatus: TimeMachineStatus = .idle
     var destinationInfo: DestinationInfo = .notSetUp
     var preferences: TimeMachinePreferences?
+    var powerSource: PowerSource = .ac
+    /// What Time Machine reports about a running backup's progress. Only read while one runs.
+    var backupProgress: BackupProgress?
+    /// Whether BackMeUp is holding its "prevent idle sleep" assertion.
+    private(set) var isPreventingIdleSleep = false
     /// Every backup started through the port succeeds unless scripted otherwise.
     var nextBackup = ScriptedBackup.succeeds
 
@@ -50,8 +62,13 @@ final class FakeSystem: System {
         self.now = now
     }
 
+    /// Time Machine reports itself running while a backup started through the port runs.
     func readTimeMachineStatus() async -> TimeMachineStatus {
-        timeMachineStatus
+        runningBackup != nil ? .running : timeMachineStatus
+    }
+
+    func readBackupProgress() async -> BackupProgress? {
+        runningBackup != nil || timeMachineStatus == .running ? backupProgress : nil
     }
 
     func readDestinationInfo() async -> DestinationInfo {
@@ -68,7 +85,12 @@ final class FakeSystem: System {
         let backup = nextBackup
         startedBackups.append(now)
         guard let exitCode = backup.exitCode else { return nil }
-        now = now.addingTimeInterval(backup.minutes * 60)
+        let end = now.addingTimeInterval(backup.minutes * 60)
+        if backup.runsWhileTimePasses {
+            await withCheckedContinuation { runningBackup = (end, $0) }
+        } else {
+            now = end
+        }
         writeResult(backup.result)
         if backup.preferencesUnreadableAfterwards { preferences = nil }
         return exitCode
@@ -80,6 +102,23 @@ final class FakeSystem: System {
 
     func loadNetworks() -> NetworkSettings? { storedNetworks }
     func saveNetworks(_ networks: NetworkSettings) { storedNetworks = networks }
+    // MARK: Backups that run while time passes
+
+    private var runningBackup: (end: Date, continuation: CheckedContinuation<Void, Never>)?
+
+    /// Whether a backup started through the port is waiting for the clock to reach its end.
+    var isWaitingOnTheClock: Bool { runningBackup != nil }
+
+    /// Lets a backup that runs while time passes finish, once the clock has reached its end.
+    func finishBackupIfDue() {
+        guard let backup = runningBackup, now >= backup.end else { return }
+        runningBackup = nil
+        backup.continuation.resume()
+    }
+
+    func setIdleSleepPrevented(_ prevented: Bool) {
+        isPreventingIdleSleep = prevented
+    }
 
     func loadHistory() -> BackupHistory? { storedHistory }
     func saveHistory(_ history: BackupHistory) { storedHistory = history }

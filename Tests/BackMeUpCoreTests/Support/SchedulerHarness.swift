@@ -1,5 +1,6 @@
 import Foundation
 import BackMeUpCore
+import Testing
 
 /// Runs the real Scheduler against a FakeSystem over simulated time.
 ///
@@ -7,7 +8,8 @@ import BackMeUpCore
 /// The clock moves one `Scheduler.tickInterval` at a time. At each step, scripted changes that are
 /// due are applied to the fake, then the scheduler ticks, as the app's timer would make it.
 /// A backup the scheduler starts runs to the end before the next step; the fake moves the clock
-/// on by the backup's scripted duration.
+/// on by the backup's scripted duration. A backup scripted with `.lasting(minutes:)` instead keeps
+/// running while the harness moves the clock, and ends at the first step at or after its end.
 ///
 /// Dates in the menu are formatted in UTC, so "today" is the UTC day of `system.now`.
 @MainActor
@@ -56,12 +58,19 @@ final class SchedulerHarness {
         await start()
     }
 
+    /// Quits the app, as the menu's Quit item does.
+    func quit() {
+        scheduler.prepareToQuit()
+    }
+
     /// Moves simulated time forward, ticking the scheduler at each step.
     func advance(minutes: Double) async {
         let end = system.now.addingTimeInterval(minutes * 60)
         while system.now < end {
             system.now = min(system.now.addingTimeInterval(Scheduler.tickInterval), end)
             applyDueChanges()
+            system.finishBackupIfDue()
+            await settle()
             await tick()
         }
     }
@@ -69,7 +78,7 @@ final class SchedulerHarness {
     /// Chooses Back Up Now in the menu, and waits for the backup to finish.
     func backUpNow() async {
         scheduler.backUpNow()
-        await scheduler.waitForBackup()
+        await settle()
     }
 
     /// Changes settings, as the Settings window does.
@@ -88,7 +97,21 @@ final class SchedulerHarness {
 
     private func tick() async {
         await scheduler.tick()
-        await scheduler.waitForBackup()
+        await settle()
+    }
+
+    /// Waits until the backup BackMeUp started, if any, has finished and been recorded, or is
+    /// running while time passes.
+    private func settle() async {
+        var turns = 0
+        while scheduler.isBackingUp, !system.isWaitingOnTheClock {
+            turns += 1
+            if turns > 10_000 {
+                Issue.record("The scheduler's backup never finished or waited on the clock")
+                return
+            }
+            await Task.yield()
+        }
     }
 
     private func applyDueChanges() {

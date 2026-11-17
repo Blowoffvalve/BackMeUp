@@ -1,7 +1,7 @@
 import AppKit
 import BackMeUpCore
 
-/// The Settings window: how often to back up, and how soon to retry.
+/// The Settings window: how often to back up, how soon to retry, and whether to back up on battery.
 ///
 /// Plain AppKit: SwiftUI's `@State` is a macro whose plugin the Command Line Tools don't ship.
 @MainActor
@@ -15,6 +15,7 @@ final class SettingsWindowController: NSObject {
     private let retryField = NSTextField()
     private let retryStepper = NSStepper()
     private lazy var networkSection = NetworkSettingsSection(scheduler: scheduler)
+    private let batteryCheckbox = NSButton(checkboxWithTitle: "Allow backups on battery", target: nil, action: nil)
 
     private static let units: [(BackupInterval.Unit, String)] = [(.hours, "hours"), (.days, "days"), (.weeks, "weeks")]
 
@@ -41,11 +42,15 @@ final class SettingsWindowController: NSObject {
 
         let intervalRow = NSStackView(views: [label("Back up every"), intervalField, intervalStepper, unitPopUp])
         let retryRow = NSStackView(views: [label("If a backup can't run, try again every"), retryField, retryStepper, label("minutes")])
+        batteryCheckbox.target = self
+        batteryCheckbox.action = #selector(controlChanged(_:))
         let stack = NSStackView(views: [
             intervalRow,
             note("Counted from the last successful backup."),
             retryRow,
             note("At least \(BackupSettings.minimumRetryMinutes) minutes."),
+            batteryCheckbox,
+            note("While a backup runs on power, BackMeUp keeps your Mac awake. Closing the lid still sleeps it."),
         ])
         stack.addArrangedSubview(networkSection.view)
         stack.setCustomSpacing(20, after: stack.arrangedSubviews[stack.arrangedSubviews.count - 2])
@@ -55,7 +60,7 @@ final class SettingsWindowController: NSObject {
         stack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 460, height: 160),
+            contentRect: NSRect(x: 0, y: 0, width: 520, height: 210),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -106,6 +111,7 @@ final class SettingsWindowController: NSObject {
         retryField.integerValue = settings.retryMinutes
         retryStepper.integerValue = settings.retryMinutes
         networkSection.reload()
+        batteryCheckbox.state = settings.allowBackupsOnBattery ? .on : .off
     }
 
     @objc private func stepperChanged(_ sender: NSStepper) {
@@ -122,7 +128,8 @@ final class SettingsWindowController: NSObject {
         let unit = Self.units[max(0, unitPopUp.indexOfSelectedItem)].0
         scheduler.updateSettings(BackupSettings(
             backupInterval: BackupInterval(count: intervalField.integerValue, unit: unit),
-            retryMinutes: retryField.integerValue
+            retryMinutes: retryField.integerValue,
+            allowBackupsOnBattery: batteryCheckbox.state == .on
         ))
         // Show the minimums the scheduler applied.
         load()

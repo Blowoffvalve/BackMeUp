@@ -34,10 +34,13 @@ public struct BackupSettings: Codable, Equatable, Sendable {
     public var backupInterval: BackupInterval
     /// How long to wait after a failed or skipped backup before trying again.
     public var retryMinutes: Int
+    /// Whether scheduled backups may start while the Mac is on battery.
+    public var allowBackupsOnBattery: Bool
 
-    public init(backupInterval: BackupInterval, retryMinutes: Int) {
+    public init(backupInterval: BackupInterval, retryMinutes: Int, allowBackupsOnBattery: Bool = true) {
         self.backupInterval = backupInterval
         self.retryMinutes = retryMinutes
+        self.allowBackupsOnBattery = allowBackupsOnBattery
     }
 
     /// The same settings, raised to the minimums: an interval of at least 1, and retries at
@@ -47,5 +50,21 @@ public struct BackupSettings: Codable, Equatable, Sendable {
         settings.backupInterval.count = max(1, backupInterval.count)
         settings.retryMinutes = max(Self.minimumRetryMinutes, retryMinutes)
         return settings
+    }
+}
+
+extension BackupSettings {
+    private enum CodingKeys: String, CodingKey {
+        case backupInterval, retryMinutes, allowBackupsOnBattery
+    }
+
+    /// Settings saved by an older version lack newer fields; those take their defaults.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            backupInterval: try container.decode(BackupInterval.self, forKey: .backupInterval),
+            retryMinutes: try container.decode(Int.self, forKey: .retryMinutes),
+            allowBackupsOnBattery: try container.decodeIfPresent(Bool.self, forKey: .allowBackupsOnBattery) ?? true
+        )
     }
 }

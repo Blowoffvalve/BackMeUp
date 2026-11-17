@@ -30,7 +30,12 @@ public final class Scheduler {
     public var onChange: (() -> Void)?
 
     private var timeMachineStatus = TimeMachineStatus.unknown
+    private var progress: BackupProgress?
+    /// The first progress seen in the running backup, to estimate the time left from.
+    private var progressStart: (date: Date, fraction: Double)?
     private var backupTask: Task<Void, Never>?
+    /// Whether Time Machine's backup command is running for BackMeUp right now.
+    private var backupCommandRunning = false
 
     public init(system: any System, calendar: Calendar = .current) {
         self.system = system
@@ -66,8 +71,10 @@ public final class Scheduler {
     public func tick() async {
         timeMachineStatus = await system.readTimeMachineStatus()
         currentNetwork = await system.readNetwork()
+        await readProgress()
+        updateSleepPrevention()
         if !isBackingUp, timeMachineStatus != .running, system.now >= nextBackupDue || isBackOnAChosenNetwork {
-            startAttempt()
+            startAttempt(byPerson: false)
         }
         describe()
     }
@@ -76,6 +83,7 @@ public final class Scheduler {
     public func refreshStatus() async {
         timeMachineStatus = await system.readTimeMachineStatus()
         currentNetwork = await system.readNetwork()
+        await readProgress()
         describe()
     }
 
@@ -121,9 +129,17 @@ public final class Scheduler {
     }
 
     /// Back Up Now: starts a backup straight away, whatever the schedule says. Does nothing while
-    /// one BackMeUp started is still running.
+    /// one BackMeUp started is still running. It runs on battery even when scheduled backups on
+    /// battery are off.
     public func backUpNow() {
-        startAttempt()
+        startAttempt(byPerson: true)
+    }
+
+    /// Called as the app quits: lets the Mac sleep again. Time Machine carries on with any backup
+    /// already running.
+    public func prepareToQuit() {
+        backupCommandRunning = false
+        updateSleepPrevention()
     }
 
     /// Waits until the backup BackMeUp started, if any, has finished and been recorded.
@@ -140,10 +156,11 @@ public final class Scheduler {
 
     // MARK: Running a backup
 
-    private func startAttempt() {
+    /// `byPerson`: Back Up Now, rather than the schedule.
+    private func startAttempt(byPerson: Bool) {
         guard backupTask == nil else { return }
         backupTask = Task {
-            let attempt = await runAttempt()
+            let attempt = await runAttempt(byPerson: byPerson)
             history.record(attempt)
             system.saveHistory(history)
             backupTask = nil
@@ -152,8 +169,11 @@ public final class Scheduler {
         describe()
     }
 
-    private func runAttempt() async -> BackupAttempt {
+    private func runAttempt(byPerson: Bool) async -> BackupAttempt {
         let started = system.now
+        if !byPerson, !settings.allowBackupsOnBattery, system.powerSource == .battery {
+            return BackupAttempt(started: started, finished: started, outcome: .skipped(.onBattery))
+        }
         let destination = await system.readDestinationInfo()
         let destinationID: String?
         switch destination {
@@ -179,7 +199,11 @@ public final class Scheduler {
             }
         }
 
+        backupCommandRunning = true
+        updateSleepPrevention()
         let exitCode = await system.startBackup()
+        backupCommandRunning = false
+        updateSleepPrevention()
         let outcome: BackupAttempt.Outcome
         if let exitCode {
             if exitCode != 0 {
@@ -190,7 +214,36 @@ public final class Scheduler {
         } else {
             outcome = .failed(.couldNotStart)
         }
+        if history.lastSuccess == nil {
+            return BackupAttempt(
+                started: started,
+                finished: system.now,
+                outcome: await firstBackupOutcome(outcome, destinationID: destinationID)
+            )
+        }
         return BackupAttempt(started: started, finished: system.now, outcome: outcome)
+    }
+
+    /// Before the first success, a backup that stopped without Time Machine reporting an error
+    /// result is paused: the long first backup is often cut short by closing the lid, and resumes
+    /// at the next try.
+    private func firstBackupOutcome(_ outcome: BackupAttempt.Outcome, destinationID: String?) async -> BackupAttempt.Outcome {
+        switch outcome {
+        case .failed(.exitCode):
+            let result = await system.readPreferences()?.destination(id: destinationID)?.result
+            if let result, result != 0 { return .failed(.result(result)) }
+            return .paused
+        case .failed(.resultUnreadable):
+            return .paused
+        default:
+            return outcome
+        }
+    }
+
+    /// Keeps the Mac awake only while BackMeUp's backup runs on AC power. On battery it sleeps as
+    /// normal. Checked again at every tick, so unplugging releases it within a minute.
+    private func updateSleepPrevention() {
+        system.setIdleSleepPrevented(backupCommandRunning && system.powerSource != .battery)
     }
 
     /// `tmutil` has been seen exiting 0 for a cancelled backup, so only `RESULT` 0 is a success.
@@ -200,6 +253,49 @@ public final class Scheduler {
         case let code?: .failed(.result(code))
         case nil: .failed(.resultUnreadable)
         }
+    }
+
+    // MARK: Progress
+
+    private func readProgress() async {
+        guard timeMachineStatus == .running else {
+            progress = nil
+            progressStart = nil
+            return
+        }
+        progress = await system.readBackupProgress()
+        if let progress, progress.fraction < progressStart?.fraction ?? .infinity {
+            progressStart = (system.now, progress.fraction)
+        }
+    }
+
+    /// Time Machine's estimate, or failing that, the rate so far carried on to the end.
+    private var timeLeft: TimeInterval? {
+        guard let progress else { return nil }
+        if let timeRemaining = progress.timeRemaining { return timeRemaining }
+        guard let start = progressStart, progress.fraction > start.fraction else { return nil }
+        let elapsed = system.now.timeIntervalSince(start.date)
+        return (1 - progress.fraction) * elapsed / (progress.fraction - start.fraction)
+    }
+
+    /// "First backup: 35%, about 3 hours left", or "Backing up now" before Time Machine says.
+    private var progressLine: String {
+        guard let progress else { return "Backing up now" }
+        let label = history.lastSuccess == nil ? "First backup" : "Backing up"
+        let percent = "\(label): \(Int(progress.fraction * 100))%"
+        return timeLeft.map { "\(percent), \(Self.describe(timeLeft: $0))" } ?? percent
+    }
+
+    /// "less than a minute left", "about 45 minutes left", "about 3 hours left", "about 3 days left".
+    private static func describe(timeLeft seconds: TimeInterval) -> String {
+        func about(_ count: Double, _ unit: String) -> String {
+            let count = Int(count.rounded())
+            return "about \(count) \(unit)\(count == 1 ? "" : "s") left"
+        }
+        if seconds < 60 { return "less than a minute left" }
+        if (seconds / 60).rounded() < 60 { return about(seconds / 60, "minute") }
+        if (seconds / 3600).rounded() < 48 { return about(max(1, seconds / 3600), "hour") }
+        return about(seconds / 86400, "day")
     }
 
     // MARK: Describing it for the menu
@@ -212,7 +308,7 @@ public final class Scheduler {
     private func updateLines() {
         updateNetworkLine()
         if isBackingUp || timeMachineStatus == .running {
-            statusLine = "Backing up now"
+            statusLine = progressLine
             nextBackupLine = ""
             return
         }
@@ -224,12 +320,18 @@ public final class Scheduler {
             statusLine = "Waiting for a chosen network"
         case let .skipped(reason)?:
             statusLine = "Backup skipped: \(reason.description)"
+        case .paused?:
+            statusLine = "First backup paused"
         case .succeeded?, nil:
             statusLine = lastBackup
         }
         let due = nextBackupDue
-        let lastWentWell = history.attempts.last.map { $0.outcome == .succeeded } ?? true
-        let label = lastWentWell ? "Next backup" : "Next try"
+        let lastOutcome = history.attempts.last?.outcome ?? .succeeded
+        let label = switch lastOutcome {
+        case .succeeded: "Next backup"
+        case .paused: "Resumes"
+        case .failed, .skipped: "Next try"
+        }
         nextBackupLine = due <= system.now ? "\(label): now" : "\(label): \(format(due))"
     }
 
