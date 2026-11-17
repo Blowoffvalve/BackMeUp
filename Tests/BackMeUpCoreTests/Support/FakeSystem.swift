@@ -36,6 +36,9 @@ final class FakeSystem: System {
     /// The simulated time each `tmutil startbackup` began.
     private(set) var startedBackups: [Date] = []
 
+    /// Every Mac notification shown, with the simulated time it was shown. Nothing real is posted.
+    private(set) var notifications: [(date: Date, alert: Alert)] = []
+
     init(now: Date) {
         self.now = now
     }
@@ -62,6 +65,10 @@ final class FakeSystem: System {
         writeResult(backup.result)
         if backup.preferencesUnreadableAfterwards { preferences = nil }
         return exitCode
+    }
+
+    func showNotification(_ alert: Alert) {
+        notifications.append((now, alert))
     }
 
     func loadHistory() -> BackupHistory? { storedHistory }

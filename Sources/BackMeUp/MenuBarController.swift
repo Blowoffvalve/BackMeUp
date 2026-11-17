@@ -21,10 +21,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         self.scheduler = scheduler
         super.init()
 
-        statusItem.button?.image = NSImage(
-            systemSymbolName: "clock.arrow.circlepath",
-            accessibilityDescription: "BackMeUp"
-        )
+        drawIcon()
 
         let menu = NSMenu()
         menu.autoenablesItems = false
@@ -109,5 +106,17 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         nextBackupItem.title = scheduler.nextBackupLine
         nextBackupItem.isHidden = scheduler.nextBackupLine.isEmpty
         backUpNowItem.isEnabled = !scheduler.isBackingUp
+        drawIcon()
+    }
+
+    /// A clock normally; a clock with an exclamation mark while backups have a problem.
+    private func drawIcon() {
+        let problem = scheduler.hasProblem
+        let image = NSImage(
+            systemSymbolName: problem ? "clock.badge.exclamationmark" : "clock.arrow.circlepath",
+            accessibilityDescription: problem ? "BackMeUp: backups need attention" : "BackMeUp"
+        )
+        image?.isTemplate = true
+        statusItem.button?.image = image
     }
 }

@@ -33,6 +33,8 @@ final class SchedulerHarness {
 
     var statusLine: String { scheduler.statusLine }
     var nextBackupLine: String { scheduler.nextBackupLine }
+    /// The Mac notifications shown so far.
+    var notifications: [Alert] { system.notifications.map(\.alert) }
 
     /// Minutes since the start date, for readable expectations.
     func minutes(_ minutes: Double) -> Date {

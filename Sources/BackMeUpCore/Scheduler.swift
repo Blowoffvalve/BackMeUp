@@ -60,6 +60,7 @@ public final class Scheduler {
         if !isBackingUp, timeMachineStatus != .running, system.now >= nextBackupDue {
             startAttempt()
         }
+        checkAlerts()
         describe()
     }
 
@@ -95,6 +96,7 @@ public final class Scheduler {
             let attempt = await runAttempt()
             history.record(attempt)
             system.saveHistory(history)
+            checkAlerts()
             backupTask = nil
             describe()
         }
@@ -138,6 +140,40 @@ public final class Scheduler {
         case let code?: .failed(.result(code))
         case nil: .failed(.resultUnreadable)
         }
+    }
+
+    // MARK: Alerts
+
+    /// Whether backups have a problem worth an alert right now: enough failures in a row, or
+    /// overdue. The menu bar icon shows it.
+    public private(set) var hasProblem = false
+
+    /// Sends an alert if one is due, or "working again" on the first success after an alert.
+    private func checkAlerts() {
+        if history.lastAlertSent != nil, let lastSuccess = history.lastSuccess,
+           history.attempts.last?.outcome == .succeeded {
+            history.lastAlertSent = nil
+            system.saveHistory(history)
+            hasProblem = false
+            send(Alert(kind: .workingAgain, title: "Backups are working again", body: "Last backup: \(format(lastSuccess))"))
+            return
+        }
+        if history.monitoringSince == nil {
+            history.monitoringSince = system.now
+            system.saveHistory(history)
+        }
+        let policy = AlertPolicy(history: history, settings: settings.alerts, now: system.now, calendar: calendar)
+        hasProblem = policy.problem() != nil
+        guard let alert = policy.alertDue() else { return }
+        history.lastAlertSent = system.now
+        system.saveHistory(history)
+        send(alert)
+    }
+
+    /// Delivers an alert on every channel: a Mac notification now; other channels, such as ntfy,
+    /// are added here, all with the same `Alert`.
+    private func send(_ alert: Alert) {
+        system.showNotification(alert)
     }
 
     // MARK: Describing it for the menu

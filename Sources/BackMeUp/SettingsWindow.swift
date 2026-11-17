@@ -1,7 +1,7 @@
 import AppKit
 import BackMeUpCore
 
-/// The Settings window: how often to back up, and how soon to retry.
+/// The Settings window: how often to back up, how soon to retry, and when to alert.
 ///
 /// Plain AppKit: SwiftUI's `@State` is a macro whose plugin the Command Line Tools don't ship.
 @MainActor
@@ -14,6 +14,10 @@ final class SettingsWindowController: NSObject {
     private let unitPopUp = NSPopUpButton()
     private let retryField = NSTextField()
     private let retryStepper = NSStepper()
+    private let failuresField = NSTextField()
+    private let failuresStepper = NSStepper()
+    private let daysField = NSTextField()
+    private let daysStepper = NSStepper()
 
     private static let units: [(BackupInterval.Unit, String)] = [(.hours, "hours"), (.days, "days"), (.weeks, "weeks")]
 
@@ -34,17 +38,24 @@ final class SettingsWindowController: NSObject {
     private func makeWindow() -> NSWindow {
         configure(intervalField, intervalStepper, range: 1...999, step: 1)
         configure(retryField, retryStepper, range: Double(BackupSettings.minimumRetryMinutes)...10_080, step: 15)
+        configure(failuresField, failuresStepper, range: 1...99, step: 1)
+        configure(daysField, daysStepper, range: 1...365, step: 1)
         unitPopUp.addItems(withTitles: Self.units.map(\.1))
         unitPopUp.target = self
         unitPopUp.action = #selector(controlChanged(_:))
 
         let intervalRow = NSStackView(views: [label("Back up every"), intervalField, intervalStepper, unitPopUp])
         let retryRow = NSStackView(views: [label("If a backup can't run, try again every"), retryField, retryStepper, label("minutes")])
+        let failuresRow = NSStackView(views: [label("Alert me after"), failuresField, failuresStepper, label("failed backups in a row")])
+        let daysRow = NSStackView(views: [label("or after"), daysField, daysStepper, label("days without a backup")])
         let stack = NSStackView(views: [
             intervalRow,
             note("Counted from the last successful backup."),
             retryRow,
             note("At least \(BackupSettings.minimumRetryMinutes) minutes."),
+            failuresRow,
+            daysRow,
+            note("Skipped backups never count as failures, but they do count towards days without a backup."),
         ])
         stack.orientation = .vertical
         stack.alignment = .leading
@@ -52,7 +63,7 @@ final class SettingsWindowController: NSObject {
         stack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 460, height: 160),
+            contentRect: NSRect(x: 0, y: 0, width: 520, height: 240),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -102,11 +113,17 @@ final class SettingsWindowController: NSObject {
         unitPopUp.selectItem(at: Self.units.firstIndex { $0.0 == settings.backupInterval.unit } ?? 1)
         retryField.integerValue = settings.retryMinutes
         retryStepper.integerValue = settings.retryMinutes
+        failuresField.integerValue = settings.alerts.failuresInARow
+        failuresStepper.integerValue = settings.alerts.failuresInARow
+        daysField.integerValue = settings.alerts.daysWithoutBackup
+        daysStepper.integerValue = settings.alerts.daysWithoutBackup
     }
 
     @objc private func stepperChanged(_ sender: NSStepper) {
         if sender === intervalStepper { intervalField.integerValue = sender.integerValue }
         if sender === retryStepper { retryField.integerValue = sender.integerValue }
+        if sender === failuresStepper { failuresField.integerValue = sender.integerValue }
+        if sender === daysStepper { daysField.integerValue = sender.integerValue }
         save()
     }
 
@@ -116,10 +133,14 @@ final class SettingsWindowController: NSObject {
 
     private func save() {
         let unit = Self.units[max(0, unitPopUp.indexOfSelectedItem)].0
-        scheduler.updateSettings(BackupSettings(
-            backupInterval: BackupInterval(count: intervalField.integerValue, unit: unit),
-            retryMinutes: retryField.integerValue
-        ))
+        var settings = scheduler.settings
+        settings.backupInterval = BackupInterval(count: intervalField.integerValue, unit: unit)
+        settings.retryMinutes = retryField.integerValue
+        settings.alerts = AlertSettings(
+            failuresInARow: failuresField.integerValue,
+            daysWithoutBackup: daysField.integerValue
+        )
+        scheduler.updateSettings(settings)
         // Show the minimums the scheduler applied.
         load()
     }

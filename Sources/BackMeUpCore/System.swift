@@ -23,6 +23,9 @@ public protocol System {
     /// Returns the exit code, or nil if the command couldn't be run.
     func startBackup() async -> Int32?
 
+    /// Shows an alert as a Mac notification.
+    func showNotification(_ alert: Alert)
+
     /// Settings storage. Values survive app restarts.
     func loadHistory() -> BackupHistory?
     func saveHistory(_ history: BackupHistory)

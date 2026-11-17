@@ -35,6 +35,13 @@ public struct BackupSettings: Codable, Equatable, Sendable {
     /// How long to wait after a failed or skipped backup before trying again.
     public var retryMinutes: Int
 
+    /// When to alert. Stored as an optional so settings saved before alerts existed still load.
+    private var storedAlerts: AlertSettings?
+    public var alerts: AlertSettings {
+        get { storedAlerts ?? .standard }
+        set { storedAlerts = newValue }
+    }
+
     public init(backupInterval: BackupInterval, retryMinutes: Int) {
         self.backupInterval = backupInterval
         self.retryMinutes = retryMinutes
@@ -46,6 +53,7 @@ public struct BackupSettings: Codable, Equatable, Sendable {
         var settings = self
         settings.backupInterval.count = max(1, backupInterval.count)
         settings.retryMinutes = max(Self.minimumRetryMinutes, retryMinutes)
+        settings.alerts = alerts.validated
         return settings
     }
 }

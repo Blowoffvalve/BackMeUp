@@ -13,6 +13,16 @@ public enum SkipReason: String, Codable, Equatable, Sendable {
         case .diskNotConnected: "backup disk not connected"
         }
     }
+
+    /// How the overdue alert explains this reason, as a sentence. `since` names the day the first
+    /// skip for this reason happened since the last success: "today", "yesterday", "Friday" or
+    /// "3 January". The alert code needs nothing else from a new reason.
+    public func alertSentence(since: String) -> String {
+        switch self {
+        case .noDiskSetUp: "Time Machine has no backup disk set up."
+        case .diskNotConnected: "The backup disk hasn't been connected since \(since)."
+        }
+    }
 }
 
 /// Why a backup that was started didn't succeed.
@@ -63,6 +73,11 @@ public struct BackupHistory: Codable, Equatable, Sendable {
     public var lastSuccess: Date?
     /// Oldest first.
     public var attempts: [BackupAttempt]
+    /// When the latest alert about the current problem was sent. nil when no problem has been
+    /// alerted since the last success.
+    public var lastAlertSent: Date?
+    /// When BackMeUp first ran. Before the first success, backups are overdue counted from here.
+    public var monitoringSince: Date?
 
     public init(lastSuccess: Date? = nil, attempts: [BackupAttempt] = []) {
         self.lastSuccess = lastSuccess

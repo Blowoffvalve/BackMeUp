@@ -1,4 +1,5 @@
 import Foundation
+import UserNotifications
 
 /// The System port's adapter for the real Mac.
 ///
@@ -37,6 +38,27 @@ public final class RealSystem: System {
 
     public func startBackup() async -> Int32? {
         await Command.run("/usr/bin/tmutil", ["startbackup", "--auto", "--block"])?.exitCode
+    }
+
+    // MARK: Notifications
+
+    private let notificationDelegate = NotificationDelegate()
+
+    /// Posts a Mac notification. Asks for permission the first time; if it's refused, the
+    /// notification is dropped (the menu bar icon still shows the problem).
+    public func showNotification(_ alert: Alert) {
+        // UNUserNotificationCenter needs an app bundle; outside one (e.g. `swift run`) it traps.
+        guard Bundle.main.bundleIdentifier != nil else { return }
+        let center = UNUserNotificationCenter.current()
+        center.delegate = notificationDelegate
+        Task {
+            guard (try? await center.requestAuthorization(options: [.alert, .sound])) == true else { return }
+            let content = UNMutableNotificationContent()
+            content.title = alert.title
+            content.body = alert.body
+            content.sound = .default
+            try? await center.add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
+        }
     }
 
     // MARK: Settings storage
@@ -101,6 +123,17 @@ enum Command {
             stdout: String(decoding: outputData, as: UTF8.self),
             stderr: String(decoding: errorData.wait(), as: UTF8.self)
         )
+    }
+}
+
+/// Shows BackMeUp's notifications even while its menu is open, when macOS counts the app as frontmost.
+private final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .list, .sound])
     }
 }
 
