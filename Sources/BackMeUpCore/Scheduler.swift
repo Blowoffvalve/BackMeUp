@@ -152,7 +152,30 @@ public final class Scheduler {
         } else {
             outcome = .failed(.couldNotStart)
         }
+        if history.lastSuccess == nil {
+            return BackupAttempt(
+                started: started,
+                finished: system.now,
+                outcome: await firstBackupOutcome(outcome, destinationID: destinationID)
+            )
+        }
         return BackupAttempt(started: started, finished: system.now, outcome: outcome)
+    }
+
+    /// Before the first success, a backup that stopped without Time Machine reporting an error
+    /// result is paused: the long first backup is often cut short by closing the lid, and resumes
+    /// at the next try.
+    private func firstBackupOutcome(_ outcome: BackupAttempt.Outcome, destinationID: String?) async -> BackupAttempt.Outcome {
+        switch outcome {
+        case .failed(.exitCode):
+            let result = await system.readPreferences()?.destination(id: destinationID)?.result
+            if let result, result != 0 { return .failed(.result(result)) }
+            return .paused
+        case .failed(.resultUnreadable):
+            return .paused
+        default:
+            return outcome
+        }
     }
 
     /// Keeps the Mac awake only while BackMeUp's backup runs on AC power. On battery it sleeps as
@@ -232,12 +255,18 @@ public final class Scheduler {
             statusLine = "Last backup failed: \(reason.description)"
         case let .skipped(reason)?:
             statusLine = "Backup skipped: \(reason.description)"
+        case .paused?:
+            statusLine = "First backup paused"
         case .succeeded?, nil:
             statusLine = lastBackup
         }
         let due = nextBackupDue
-        let lastWentWell = history.attempts.last.map { $0.outcome == .succeeded } ?? true
-        let label = lastWentWell ? "Next backup" : "Next try"
+        let lastOutcome = history.attempts.last?.outcome ?? .succeeded
+        let label = switch lastOutcome {
+        case .succeeded: "Next backup"
+        case .paused: "Resumes"
+        case .failed, .skipped: "Next try"
+        }
         nextBackupLine = due <= system.now ? "\(label): now" : "\(label): \(format(due))"
     }
 

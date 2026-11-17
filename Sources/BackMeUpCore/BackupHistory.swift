@@ -44,6 +44,9 @@ public struct BackupAttempt: Codable, Equatable, Sendable {
         case succeeded
         case failed(FailureReason)
         case skipped(SkipReason)
+        /// The first backup stopped before finishing, with no error result. Not a failure: it
+        /// resumes at the next try.
+        case paused
     }
 
     public var started: Date
