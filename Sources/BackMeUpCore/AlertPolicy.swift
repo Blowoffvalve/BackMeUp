@@ -53,8 +53,16 @@ struct AlertPolicy {
                 body: "\(opening) \(reason.alertSentence(since: dayName(firstSkip)))"
             )
         }
-        if let last = failures.last {
+        let pauses = attempts.filter { $0.outcome == .paused }.count
+        if let last = failures.last, failures.count >= pauses {
             return Alert(kind: .overdue, title: failedTitle(failures.count), body: "\(opening) \(failureSentence(failures.count, last))")
+        }
+        if pauses > 0 {
+            return Alert(
+                kind: .overdue,
+                title: "First backup not finished",
+                body: "\(opening) The first backup keeps stopping before it finishes."
+            )
         }
         return Alert(kind: .overdue, title: "Backups overdue", body: opening)
     }

@@ -13,6 +13,9 @@ public protocol System {
     /// Whether Time Machine is backing up right now.
     func readTimeMachineStatus() async -> TimeMachineStatus
 
+    /// How far the running backup has got, or nil if Time Machine doesn't say.
+    func readBackupProgress() async -> BackupProgress?
+
     /// Time Machine's backup disk, if any.
     func readDestinationInfo() async -> DestinationInfo
 
@@ -22,6 +25,13 @@ public protocol System {
     /// Runs `tmutil startbackup --auto --block`: starts a backup and waits for it to finish.
     /// Returns the exit code, or nil if the command couldn't be run.
     func startBackup() async -> Int32?
+
+    /// What the Mac is running on right now.
+    var powerSource: PowerSource { get }
+
+    /// Holds or releases BackMeUp's power assertion that stops the Mac sleeping when idle. Closing
+    /// the lid still sleeps it. Calling it again with the same value does nothing.
+    func setIdleSleepPrevented(_ prevented: Bool)
 
     /// Shows an alert as a Mac notification.
     func showNotification(_ alert: Alert)

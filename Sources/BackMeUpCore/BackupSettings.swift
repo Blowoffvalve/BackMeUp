@@ -34,17 +34,16 @@ public struct BackupSettings: Codable, Equatable, Sendable {
     public var backupInterval: BackupInterval
     /// How long to wait after a failed or skipped backup before trying again.
     public var retryMinutes: Int
+    /// Whether scheduled backups may start while the Mac is on battery.
+    public var allowBackupsOnBattery: Bool
 
-    /// When to alert. Stored as an optional so settings saved before alerts existed still load.
-    private var storedAlerts: AlertSettings?
-    public var alerts: AlertSettings {
-        get { storedAlerts ?? .standard }
-        set { storedAlerts = newValue }
-    }
+    /// When to alert that backups have stopped.
+    public var alerts: AlertSettings = .standard
 
-    public init(backupInterval: BackupInterval, retryMinutes: Int) {
+    public init(backupInterval: BackupInterval, retryMinutes: Int, allowBackupsOnBattery: Bool = true) {
         self.backupInterval = backupInterval
         self.retryMinutes = retryMinutes
+        self.allowBackupsOnBattery = allowBackupsOnBattery
     }
 
     /// The same settings, raised to the minimums: an interval of at least 1, and retries at
@@ -55,5 +54,22 @@ public struct BackupSettings: Codable, Equatable, Sendable {
         settings.retryMinutes = max(Self.minimumRetryMinutes, retryMinutes)
         settings.alerts = alerts.validated
         return settings
+    }
+}
+
+extension BackupSettings {
+    private enum CodingKeys: String, CodingKey {
+        case backupInterval, retryMinutes, allowBackupsOnBattery, alerts
+    }
+
+    /// Settings saved by an older version lack newer fields; those take their defaults.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            backupInterval: try container.decode(BackupInterval.self, forKey: .backupInterval),
+            retryMinutes: try container.decode(Int.self, forKey: .retryMinutes),
+            allowBackupsOnBattery: try container.decodeIfPresent(Bool.self, forKey: .allowBackupsOnBattery) ?? true
+        )
+        alerts = try container.decodeIfPresent(AlertSettings.self, forKey: .alerts) ?? .standard
     }
 }

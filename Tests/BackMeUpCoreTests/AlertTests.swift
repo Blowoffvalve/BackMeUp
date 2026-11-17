@@ -69,7 +69,7 @@ struct AlertTests {
     @Test func theFailureAlertWaitsForTheChosenNumberOfFailuresInARow() async {
         let harness = harnessWithNetworkDisk()
         harness.changeSettings { $0.alerts.failuresInARow = 3 }
-        harness.system.nextBackup = .fails(exitCode: 1)
+        harness.system.nextBackup = .fails(result: 22)
 
         await harness.start() // fails at 00:20, 01:40 and 03:00 (started at 02:40)
         await harness.advance(minutes: 139)
@@ -78,14 +78,14 @@ struct AlertTests {
         await harness.advance(minutes: 1)
         #expect(harness.system.notifications.map(\.date) == [harness.minutes(180)])
         #expect(harness.notifications == [
-            Alert(kind: .failed, title: "Backups failed", body: "3 backups didn't finish. Time Machine stopped with code 1."),
+            Alert(kind: .failed, title: "Backups failed", body: "3 backups didn't finish. Time Machine reported error 22."),
         ])
     }
 
     @Test func aSuccessBeforeAnyAlertSendsNothing() async {
         let harness = harnessWithNetworkDisk()
         harness.changeSettings { $0.alerts.failuresInARow = 2 }
-        harness.system.nextBackup = .fails(exitCode: 1)
+        harness.system.nextBackup = .fails(result: 22)
         harness.at(minutes: 30) { $0.nextBackup = .succeeds }
 
         await harness.start()
@@ -184,14 +184,14 @@ struct AlertTests {
     @Test func overdueAfterFailuresBelowTheThresholdSaysTheyFailed() async {
         let harness = harnessWithNetworkDisk()
         harness.changeSettings { $0.alerts.failuresInARow = 100 }
-        harness.system.nextBackup = .fails(exitCode: 1)
+        harness.system.nextBackup = .fails(result: 22)
 
         await harness.start() // fails every 80 minutes, from 00:20
         await harness.advance(minutes: 3 * 24 * 60) // overdue at 00:00 on day 4, after 54 failures
 
         #expect(harness.notifications.map(\.kind) == [.overdue])
         #expect(harness.notifications.first?.title == "Backups failed")
-        #expect(harness.notifications.first?.body == "No backup for 3 days. 54 backups didn't finish. Time Machine stopped with code 1.")
+        #expect(harness.notifications.first?.body == "No backup for 3 days. 54 backups didn't finish. Time Machine reported error 22.")
     }
 
     @Test func aSuccessAfterAnOverdueAlertSaysBackupsAreWorkingAgain() async {
@@ -201,6 +201,48 @@ struct AlertTests {
         await harness.advance(minutes: 5 * 24 * 60)
 
         #expect(harness.notifications.map(\.kind) == [.overdue, .workingAgain])
+    }
+
+    @Test func daysOnBatteryWithBatteryBackupsOffNameTheBattery() async {
+        let harness = harnessWithNetworkDisk()
+        harness.changeSettings { $0.allowBackupsOnBattery = false }
+        harness.at(minutes: 30) { $0.powerSource = .battery }
+
+        await harness.start() // backs up on power, Thursday 00:00 to 00:20
+        await harness.advance(minutes: 3 * 24 * 60)
+
+        #expect(harness.notifications == [Alert(
+            kind: .overdue,
+            title: "Backups skipped",
+            body: "No backup for 3 days. Your Mac has been on battery each time a backup was due since Friday."
+        )])
+    }
+
+    // MARK: The first backup
+
+    @Test func aPausedFirstBackupSendsNoAlert() async {
+        let harness = harnessWithNetworkDisk()
+        harness.system.nextBackup = .fails(exitCode: 1, result: nil) // interrupted, no error result
+
+        await harness.start()
+        await harness.advance(minutes: 24 * 60)
+
+        #expect(harness.notifications.isEmpty)
+        #expect(!harness.scheduler.hasProblem)
+    }
+
+    @Test func aFirstBackupPausedForDaysIsOverdue() async {
+        let harness = harnessWithNetworkDisk()
+        harness.system.nextBackup = .fails(exitCode: 1, result: nil)
+
+        await harness.start()
+        await harness.advance(minutes: 3 * 24 * 60)
+
+        #expect(harness.notifications == [Alert(
+            kind: .overdue,
+            title: "First backup not finished",
+            body: "No backup for 3 days. The first backup keeps stopping before it finishes."
+        )])
     }
 
     // MARK: Menu bar icon
@@ -230,7 +272,7 @@ struct AlertTests {
     @Test func theIconShowsNoProblemForFailuresBelowTheThreshold() async {
         let harness = harnessWithNetworkDisk()
         harness.changeSettings { $0.alerts.failuresInARow = 2 }
-        harness.system.nextBackup = .fails(exitCode: 1)
+        harness.system.nextBackup = .fails(result: 22)
 
         await harness.start()
 

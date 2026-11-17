@@ -6,11 +6,14 @@ public enum SkipReason: String, Codable, Equatable, Sendable {
     case noDiskSetUp
     /// The backup disk is a local disk that isn't mounted.
     case diskNotConnected
+    /// The Mac is on battery and backups on battery are turned off.
+    case onBattery
 
     public var description: String {
         switch self {
         case .noDiskSetUp: "no Time Machine disk set up"
         case .diskNotConnected: "backup disk not connected"
+        case .onBattery: "on battery"
         }
     }
 
@@ -21,6 +24,7 @@ public enum SkipReason: String, Codable, Equatable, Sendable {
         switch self {
         case .noDiskSetUp: "Time Machine has no backup disk set up."
         case .diskNotConnected: "The backup disk hasn't been connected since \(since)."
+        case .onBattery: "Your Mac has been on battery each time a backup was due since \(since)."
         }
     }
 }
@@ -51,6 +55,9 @@ public struct BackupAttempt: Codable, Equatable, Sendable {
         case succeeded
         case failed(FailureReason)
         case skipped(SkipReason)
+        /// The first backup stopped before finishing, with no error result. Not a failure: it
+        /// resumes at the next try.
+        case paused
     }
 
     public var started: Date

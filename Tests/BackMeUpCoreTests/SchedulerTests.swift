@@ -97,22 +97,23 @@ struct SchedulerTests {
         (.fails(exitCode: nil), "Last backup failed: couldn't start Time Machine"),
     ]
 
+    /// After the first success. Before it, some of these are a paused first backup instead.
     @Test(arguments: failures)
     func anythingButExit0AndResult0IsAFailure(backup: FakeSystem.ScriptedBackup, expected: String) async {
-        let harness = harnessWithNetworkDisk()
+        let harness = await harnessAfterFirstBackup()
         harness.system.nextBackup = backup
 
-        await harness.start()
+        await harness.backUpNow()
 
         #expect(harness.statusLine == expected)
-        #expect(harness.scheduler.history.lastSuccess == nil)
+        #expect(harness.scheduler.history.lastSuccess == harness.minutes(20))
     }
 
     @Test func unreadablePreferencesAfterABackupAreAFailure() async {
-        let harness = harnessWithNetworkDisk()
+        let harness = await harnessAfterFirstBackup()
         harness.system.nextBackup.preferencesUnreadableAfterwards = true
 
-        await harness.start()
+        await harness.backUpNow()
 
         #expect(harness.statusLine == "Last backup failed: couldn't read Time Machine's result")
     }
