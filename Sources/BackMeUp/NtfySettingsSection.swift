@@ -20,7 +20,7 @@ final class NtfySettingsSection: NSObject, NSTextFieldDelegate {
 
         let title = NSTextField(labelWithString: "Phone alerts (optional)")
         title.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
-        let hint = Self.note("Install the ntfy app on your phone and subscribe to a topic, then enter it here. Every alert is also sent there. Use a topic that's hard to guess: anyone who knows it can read your alerts.")
+        let hint = NSTextField.note("Install the ntfy app on your phone and subscribe to a topic, then enter it here. Every alert is also sent there. Use a topic that's hard to guess: anyone who knows it can read your alerts.")
 
         for field in [serverField, topicField, tokenField] {
             field.delegate = self
@@ -91,15 +91,5 @@ final class NtfySettingsSection: NSObject, NSTextFieldDelegate {
             testResult.textColor = result.succeeded ? .secondaryLabelColor : .systemRed
             testResult.stringValue = result.message
         }
-    }
-
-    private static func note(_ text: String) -> NSTextField {
-        let field = NSTextField(labelWithString: text)
-        field.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-        field.textColor = .secondaryLabelColor
-        field.preferredMaxLayoutWidth = 420
-        field.lineBreakMode = .byWordWrapping
-        field.maximumNumberOfLines = 0
-        return field
     }
 }

@@ -59,14 +59,14 @@ final class SettingsWindowController: NSObject {
         let daysRow = NSStackView(views: [label("or after"), daysField, daysStepper, label("days without a backup")])
         let stack = NSStackView(views: [
             intervalRow,
-            note("Counted from the last successful backup."),
+            NSTextField.note("Counted from the last successful backup."),
             retryRow,
-            note("At least \(BackupSettings.minimumRetryMinutes) minutes."),
+            NSTextField.note("At least \(BackupSettings.minimumRetryMinutes) minutes."),
             batteryCheckbox,
-            note("While a backup runs on power, BackMeUp keeps your Mac awake. Closing the lid still sleeps it."),
+            NSTextField.note("While a backup runs on power, BackMeUp keeps your Mac awake. Closing the lid still sleeps it."),
             failuresRow,
             daysRow,
-            note("Skipped backups never count as failures, but they do count towards days without a backup."),
+            NSTextField.note("Skipped backups never count as failures, but they do count towards days without a backup."),
         ])
         stack.addArrangedSubview(networkSection.view)
         stack.setCustomSpacing(20, after: stack.arrangedSubviews[stack.arrangedSubviews.count - 2])
@@ -112,13 +112,6 @@ final class SettingsWindowController: NSObject {
 
     private func label(_ text: String) -> NSTextField {
         NSTextField(labelWithString: text)
-    }
-
-    private func note(_ text: String) -> NSTextField {
-        let field = NSTextField(labelWithString: text)
-        field.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-        field.textColor = .secondaryLabelColor
-        return field
     }
 
     // MARK: Reading and saving

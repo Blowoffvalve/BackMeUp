@@ -49,12 +49,7 @@ final class NetworkSettingsSection: NSObject {
 
         let title = NSTextField(labelWithString: "Networks for backups to a network disk")
         title.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
-        let hint = NSTextField(labelWithString: "Add the network you're on with \u{201C}Allow backups on this network\u{201D} in the menu. A USB disk backs up on any network.")
-        hint.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-        hint.textColor = .secondaryLabelColor
-        hint.preferredMaxLayoutWidth = 420
-        hint.lineBreakMode = .byWordWrapping
-        hint.maximumNumberOfLines = 0
+        let hint = NSTextField.note("Add the network you're on with \u{201C}Allow backups on this network\u{201D} in the menu. A USB disk backs up on any network.")
 
         view.orientation = .vertical
         view.alignment = .leading

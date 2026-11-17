@@ -21,9 +21,9 @@ final class UpdateSettingsSection: NSObject {
 
         let note: NSTextField
         if updater.isAvailable {
-            note = Self.note("BackMeUp checks for updates once a day. Unless this is on, it asks before installing one.")
+            note = NSTextField.note("BackMeUp checks for updates once a day. Unless this is on, it asks before installing one.")
         } else {
-            note = Self.note("This copy of BackMeUp can't update itself. Download new versions from GitHub.")
+            note = NSTextField.note("This copy of BackMeUp can't update itself. Download new versions from GitHub.")
             automaticCheckbox.isEnabled = false
             checkNow.isEnabled = false
         }
@@ -48,12 +48,5 @@ final class UpdateSettingsSection: NSObject {
 
     @objc private func checkNow() {
         updater.checkForUpdates()
-    }
-
-    private static func note(_ text: String) -> NSTextField {
-        let field = NSTextField(labelWithString: text)
-        field.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-        field.textColor = .secondaryLabelColor
-        return field
     }
 }
