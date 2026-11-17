@@ -167,6 +167,49 @@ struct AlertTests {
         ])
     }
 
+    @Test func theOverdueAlertNamesTheFirstSkipHoweverManySkipsThereWere() async {
+        let harness = await harnessWithDiskUnpluggedAfterFirstBackup()
+        // Skips every 15 minutes from Friday 00:20: far more than the history keeps.
+        harness.changeSettings {
+            $0.retryMinutes = 15
+            $0.alerts.daysWithoutBackup = 5
+        }
+
+        await harness.advance(minutes: 5 * 24 * 60)
+
+        #expect(harness.notifications.map(\.body) == [
+            "No backup for 5 days. The backup disk hasn't been connected since Friday.",
+        ])
+    }
+
+    @Test func theFailureAlertCountsEveryFailureHoweverManyThereWere() async {
+        let harness = harnessWithNetworkDisk()
+        harness.changeSettings { $0.retryMinutes = 15 }
+        harness.system.nextBackup = .fails(result: 19, minutes: 0)
+
+        await harness.start() // fails at 00:00, then every 15 minutes, alerted once a day
+        await harness.advance(minutes: 3 * 24 * 60)
+
+        #expect(harness.notifications.map(\.body).last == "288 backups didn't finish. Time Machine reported error 19.")
+    }
+
+    @Test func failuresInHistorySavedByAnOlderVersionStillCount() async {
+        let harness = harnessWithNetworkDisk()
+        let earlier = harness.startDate.addingTimeInterval(-2 * 24 * 60 * 60)
+        let laterStill = harness.startDate.addingTimeInterval(-60 * 60)
+        // Saved before BackMeUp kept a tally: only the attempts themselves.
+        harness.system.storedHistory = BackupHistory(lastSuccess: earlier, attempts: [
+            BackupAttempt(started: earlier, finished: earlier, outcome: .succeeded),
+            BackupAttempt(started: laterStill, finished: laterStill, outcome: .failed(.result(19))),
+        ])
+        harness.changeSettings { $0.alerts.failuresInARow = 2 }
+        harness.system.nextBackup = .fails(result: 22)
+
+        await harness.restart()
+
+        #expect(harness.notifications.map(\.body) == ["2 backups didn't finish. Time Machine reported error 22."])
+    }
+
     @Test func overdueWithNoBackupEverCountsFromFirstLaunch() async {
         let harness = SchedulerHarness()
         harness.system.destinationInfo = .notSetUp

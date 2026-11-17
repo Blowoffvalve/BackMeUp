@@ -27,9 +27,9 @@ struct AlertPolicy {
 
     /// The alert describing the current problem, if there is one.
     func problem() -> Alert? {
-        let failures = attemptsSinceLastSuccess.compactMap(\.failure)
-        if let last = failures.last, failures.count >= settings.failuresInARow {
-            return Alert(kind: .failed, title: failedTitle(failures.count), body: failureSentence(failures.count, last))
+        let tally = history.sinceLastSuccess
+        if let last = tally.lastFailure, tally.failures >= settings.failuresInARow {
+            return Alert(kind: .failed, title: failedTitle(tally.failures), body: failureSentence(tally.failures, last))
         }
         return overdue()
     }
@@ -42,22 +42,18 @@ struct AlertPolicy {
         guard days >= settings.daysWithoutBackup else { return nil }
         let opening = "No backup for \(days) \(days == 1 ? "day" : "days")."
 
-        let attempts = attemptsSinceLastSuccess
-        let failures = attempts.compactMap(\.failure)
-        let skips = attempts.compactMap(\.skip)
-        if let reason = mainSkipReason(skips.map(\.reason)), skips.count >= failures.count {
-            let firstSkip = skips.first { $0.reason == reason }!.date
+        let tally = history.sinceLastSuccess
+        if let skips = mainSkipReason(tally.skips), tally.skipCount >= tally.failures {
             return Alert(
                 kind: .overdue,
                 title: "Backups skipped",
-                body: "\(opening) \(reason.alertSentence(since: dayName(firstSkip)))"
+                body: "\(opening) \(skips.reason.alertSentence(since: dayName(skips.first)))"
             )
         }
-        let pauses = attempts.filter { $0.outcome == .paused }.count
-        if let last = failures.last, failures.count >= pauses {
-            return Alert(kind: .overdue, title: failedTitle(failures.count), body: "\(opening) \(failureSentence(failures.count, last))")
+        if let last = tally.lastFailure, tally.failures >= tally.pauses {
+            return Alert(kind: .overdue, title: failedTitle(tally.failures), body: "\(opening) \(failureSentence(tally.failures, last))")
         }
-        if pauses > 0 {
+        if tally.pauses > 0 {
             return Alert(
                 kind: .overdue,
                 title: "First backup not finished",
@@ -67,11 +63,9 @@ struct AlertPolicy {
         return Alert(kind: .overdue, title: "Backups overdue", body: opening)
     }
 
-    /// The reason given most often, the latest of those if there's a tie.
-    private func mainSkipReason(_ reasons: [SkipReason]) -> SkipReason? {
-        func count(_ reason: SkipReason) -> Int { reasons.filter { $0 == reason }.count }
-        // `max` keeps the first of equal elements, so search newest first.
-        return reasons.reversed().max { count($0) < count($1) }
+    /// The reason given most often, the one that came up most recently if there's a tie.
+    private func mainSkipReason(_ skips: [SinceLastSuccess.Skips]) -> SinceLastSuccess.Skips? {
+        skips.max { ($0.count, $0.latest) < ($1.count, $1.latest) }
     }
 
     // MARK: Wording
@@ -98,23 +92,6 @@ struct AlertPolicy {
         default: formatter.dateFormat = "d MMMM"
         }
         return formatter.string(from: date)
-    }
-
-    // MARK: History
-
-    private var attemptsSinceLastSuccess: ArraySlice<BackupAttempt> {
-        let start = history.attempts.lastIndex { $0.outcome == .succeeded }.map { $0 + 1 } ?? 0
-        return history.attempts[start...]
-    }
-}
-
-private extension BackupAttempt {
-    var failure: FailureReason? {
-        if case let .failed(reason) = outcome { reason } else { nil }
-    }
-
-    var skip: (reason: SkipReason, date: Date)? {
-        if case let .skipped(reason) = outcome { (reason, started) } else { nil }
     }
 }
 

@@ -95,9 +95,56 @@ public struct BackupAttempt: Codable, Equatable, Sendable {
     }
 }
 
+/// A tally of every attempt since the last success, kept in full however many attempts
+/// `BackupHistory` drops, so alerts can count and date them correctly.
+public struct SinceLastSuccess: Codable, Equatable, Sendable {
+    /// How often one skip reason came up.
+    public struct Skips: Codable, Equatable, Sendable {
+        public var reason: SkipReason
+        public var count: Int
+        /// When the first and latest skips for this reason started.
+        public var first: Date
+        public var latest: Date
+    }
+
+    public var failures = 0
+    public var lastFailure: FailureReason?
+    public var pauses = 0
+    /// One entry per reason, in the order each reason first came up.
+    public var skips: [Skips] = []
+
+    public init() {}
+
+    init(_ attempts: some Sequence<BackupAttempt>) {
+        for attempt in attempts { add(attempt) }
+    }
+
+    /// Counts an attempt. A success starts the tally again.
+    mutating func add(_ attempt: BackupAttempt) {
+        switch attempt.outcome {
+        case .succeeded:
+            self = SinceLastSuccess()
+        case let .failed(reason):
+            failures += 1
+            lastFailure = reason
+        case .paused:
+            pauses += 1
+        case let .skipped(reason):
+            if let index = skips.firstIndex(where: { $0.reason == reason }) {
+                skips[index].count += 1
+                skips[index].latest = attempt.started
+            } else {
+                skips.append(Skips(reason: reason, count: 1, first: attempt.started, latest: attempt.started))
+            }
+        }
+    }
+
+    public var skipCount: Int { skips.reduce(0) { $0 + $1.count } }
+}
+
 /// What BackMeUp remembers about its backups across restarts.
 public struct BackupHistory: Codable, Equatable, Sendable {
-    /// How many attempts are kept. Older ones are dropped.
+    /// How many attempts are kept. Older ones are dropped, but `sinceLastSuccess` still counts them.
     public static let maximumAttempts = 200
 
     /// When the last successful backup finished.
@@ -112,6 +159,17 @@ public struct BackupHistory: Codable, Equatable, Sendable {
     /// Whether the one-time "First backup finished" ntfy message is still to be sent: set at the
     /// first success when ntfy is set up, cleared once the message is sent.
     public var firstBackupMessagePending: Bool?
+    /// The tally since the last success, as stored. nil in history saved before it existed; see
+    /// `sinceLastSuccess`.
+    private var storedSinceLastSuccess: SinceLastSuccess?
+
+    /// Every attempt since the last success, counted, including ones too old to be kept. For
+    /// history saved before the tally existed, it's worked out from the attempts still kept.
+    public var sinceLastSuccess: SinceLastSuccess {
+        if let storedSinceLastSuccess { return storedSinceLastSuccess }
+        let start = attempts.lastIndex { $0.outcome == .succeeded }.map { $0 + 1 } ?? 0
+        return SinceLastSuccess(attempts[start...])
+    }
 
     public init(lastSuccess: Date? = nil, attempts: [BackupAttempt] = []) {
         self.lastSuccess = lastSuccess
@@ -119,6 +177,9 @@ public struct BackupHistory: Codable, Equatable, Sendable {
     }
 
     mutating func record(_ attempt: BackupAttempt) {
+        var tally = sinceLastSuccess
+        tally.add(attempt)
+        storedSinceLastSuccess = tally
         attempts.append(attempt)
         if attempts.count > Self.maximumAttempts {
             attempts.removeFirst(attempts.count - Self.maximumAttempts)
