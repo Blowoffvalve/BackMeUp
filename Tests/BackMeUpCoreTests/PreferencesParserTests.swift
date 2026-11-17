@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 import BackMeUpCore
 
@@ -44,6 +45,27 @@ struct PreferencesParserTests {
     func result(line: String, expected: Int?) throws {
         let preferences = try #require(TimeMachinePreferences(defaultsOutput: Self.oneDestination(line)))
         #expect(preferences.destination(id: "ID-1")?.result == expected)
+    }
+
+    @Test func theLatestSnapshotComesFromTheRealOutput() throws {
+        let preferences = try #require(TimeMachinePreferences(defaultsOutput: try fixture("defaults-timemachine-network.txt")))
+        // The newest of SnapshotDates: 2026-01-03 05:46:51 +0000.
+        #expect(preferences.destination(id: Self.destinationID)?.latestSnapshot == Date(timeIntervalSince1970: 1_767_419_211))
+    }
+
+    @Test(arguments: [
+        // Newest first or last, it's the newest that counts.
+        (#"SnapshotDates = ("2026-01-02 00:00:00 +0000", "2026-01-01 00:00:00 +0000");"#, 1_767_312_000 as Double?),
+        (#"SnapshotDates = ("2026-01-01 00:00:00 +0000", "not a date", "2026-01-02 00:00:00 +0000");"#, 1_767_312_000),
+        // Another time zone.
+        (#"SnapshotDates = ("2026-01-02 01:00:00 +0100");"#, 1_767_312_000),
+        (#"SnapshotDates = ();"#, nil),
+        (#"SnapshotDates = "2026-01-02 00:00:00 +0000";"#, nil),
+        ("", nil),
+    ])
+    func latestSnapshot(line: String, expected: Double?) throws {
+        let preferences = try #require(TimeMachinePreferences(defaultsOutput: Self.oneDestination(line)))
+        #expect(preferences.destination(id: "ID-1")?.latestSnapshot == expected.map(Date.init(timeIntervalSince1970:)))
     }
 
     @Test func aDestinationThatIsNotThereIsNil() throws {

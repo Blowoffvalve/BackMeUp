@@ -103,6 +103,7 @@ extension FailureReason {
         case let .exitCode(code): "Time Machine stopped with code \(code)."
         case let .result(code): "Time Machine reported error \(code)."
         case .resultUnreadable: "BackMeUp couldn't read Time Machine's result."
+        case .notConfirmed: "BackMeUp couldn't tell whether Time Machine finished the backup."
         }
     }
 }

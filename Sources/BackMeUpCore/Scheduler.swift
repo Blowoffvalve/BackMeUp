@@ -359,60 +359,25 @@ public final class Scheduler {
             }
         }
 
+        let before = BackupVerdict.Before(await system.readPreferences(), destinationID: destinationID)
         backupCommandRunning = true
         updateSleepPrevention()
         let exitCode = await system.startBackup()
         backupCommandRunning = false
         updateSleepPrevention()
-        let outcome: BackupAttempt.Outcome
-        if let exitCode {
-            if exitCode != 0 {
-                outcome = .failed(.exitCode(exitCode))
-            } else {
-                outcome = Self.judge(result: await system.readPreferences()?.destination(id: destinationID)?.result)
-            }
-        } else {
-            outcome = .failed(.couldNotStart)
-        }
-        if history.lastSuccess == nil {
-            return BackupAttempt(
-                started: started,
-                finished: system.now,
-                outcome: await firstBackupOutcome(outcome, destinationID: destinationID)
-            )
-        }
-        return BackupAttempt(started: started, finished: system.now, outcome: outcome)
-    }
-
-    /// Before the first success, a backup that stopped without Time Machine reporting an error
-    /// result is paused: the long first backup is often cut short by closing the lid, and resumes
-    /// at the next try.
-    private func firstBackupOutcome(_ outcome: BackupAttempt.Outcome, destinationID: String?) async -> BackupAttempt.Outcome {
-        switch outcome {
-        case .failed(.exitCode):
-            let result = await system.readPreferences()?.destination(id: destinationID)?.result
-            if let result, result != 0 { return .failed(.result(result)) }
-            return .paused
-        case .failed(.resultUnreadable):
-            return .paused
-        default:
-            return outcome
-        }
+        let verdict = BackupVerdict(
+            before: before,
+            exitCode: exitCode,
+            after: exitCode == nil ? nil : await system.readPreferences()?.destination(id: destinationID),
+            isFirstBackup: history.lastSuccess == nil
+        )
+        return BackupAttempt(started: started, finished: system.now, outcome: verdict.outcome)
     }
 
     /// Keeps the Mac awake only while BackMeUp's backup runs on AC power. On battery it sleeps as
     /// normal. Checked again at every tick, so unplugging releases it within a minute.
     private func updateSleepPrevention() {
         system.setIdleSleepPrevented(backupCommandRunning && system.powerSource != .battery)
-    }
-
-    /// `tmutil` has been seen exiting 0 for a cancelled backup, so only `RESULT` 0 is a success.
-    private static func judge(result: Int?) -> BackupAttempt.Outcome {
-        switch result {
-        case 0: .succeeded
-        case let code?: .failed(.result(code))
-        case nil: .failed(.resultUnreadable)
-        }
     }
 
     // MARK: Alerts

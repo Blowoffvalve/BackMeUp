@@ -18,14 +18,25 @@ final class FakeSystem: System {
         /// Whether the backup stays running while `SchedulerHarness` moves the clock, so the test
         /// can look at the Mac mid-backup. Otherwise the clock jumps straight to its end.
         var runsWhileTimePasses = false
+        /// Whether Time Machine records a new snapshot for the disk, as a finished backup does.
+        var addsSnapshot = true
 
         static let succeeds = ScriptedBackup()
         static func fails(exitCode: Int32? = 0, result: Int? = 0, minutes: Double = 20) -> ScriptedBackup {
-            ScriptedBackup(exitCode: exitCode, result: result, minutes: minutes)
+            ScriptedBackup(exitCode: exitCode, result: result, minutes: minutes, addsSnapshot: false)
         }
+        /// `tmutil` exits 0 and `RESULT` is still 0 from an earlier backup, but no new backup was
+        /// made.
+        static let staleResult = ScriptedBackup(exitCode: 0, result: 0, addsSnapshot: false)
         /// A backup that keeps running for `minutes` of simulated time, then ends as scripted.
         static func lasting(minutes: Double, exitCode: Int32? = 0, result: Int? = 0) -> ScriptedBackup {
-            ScriptedBackup(exitCode: exitCode, result: result, minutes: minutes, runsWhileTimePasses: true)
+            ScriptedBackup(
+                exitCode: exitCode,
+                result: result,
+                minutes: minutes,
+                runsWhileTimePasses: true,
+                addsSnapshot: exitCode == 0 && result == 0
+            )
         }
     }
 
@@ -95,7 +106,7 @@ final class FakeSystem: System {
         } else {
             now = end
         }
-        writeResult(backup.result)
+        writeResult(backup.result, addingSnapshot: backup.addsSnapshot)
         if backup.preferencesUnreadableAfterwards { preferences = nil }
         return exitCode
     }
@@ -215,12 +226,14 @@ final class FakeSystem: System {
         storedNtfyServer = nil
     }
 
-    private func writeResult(_ result: Int?) {
+    private func writeResult(_ result: Int?, addingSnapshot: Bool) {
         guard case let .configured(destination) = destinationInfo else { return }
         var preferences = preferences ?? TimeMachinePreferences(autoBackup: false, destinations: [])
-        let encryption = preferences.destination(id: destination.id)?.encryption ?? .encrypted
+        let entry = preferences.destination(id: destination.id)
+        let encryption = entry?.encryption ?? .encrypted
+        let latestSnapshot = addingSnapshot ? now : entry?.latestSnapshot
         preferences.destinations.removeAll { $0.id == destination.id }
-        preferences.destinations.append(.init(id: destination.id, encryption: encryption, result: result))
+        preferences.destinations.append(.init(id: destination.id, encryption: encryption, result: result, latestSnapshot: latestSnapshot))
         self.preferences = preferences
     }
 }

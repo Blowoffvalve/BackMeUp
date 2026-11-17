@@ -17,12 +17,17 @@ public struct TimeMachinePreferences: Equatable, Sendable {
         public var id: String?
         public var encryption: EncryptionState
         /// `RESULT`: Time Machine's result code for the last backup to this disk. 0 means success.
+        /// Nothing in it says which backup it belongs to.
         public var result: Int?
+        /// The newest of `SnapshotDates`: when the latest backup on this disk was made. A finished
+        /// backup adds one, so a newer one shows `result` belongs to a backup that just finished.
+        public var latestSnapshot: Date?
 
-        public init(id: String?, encryption: EncryptionState = .unknown, result: Int?) {
+        public init(id: String?, encryption: EncryptionState = .unknown, result: Int?, latestSnapshot: Date? = nil) {
             self.id = id
             self.encryption = encryption
             self.result = result
+            self.latestSnapshot = latestSnapshot
         }
     }
 
@@ -59,7 +64,8 @@ extension TimeMachinePreferences {
             DestinationEntry(
                 id: entry.string("DestinationID"),
                 encryption: EncryptionState(preferenceValue: entry.string("LastKnownEncryptionState")),
-                result: entry.integer("RESULT")
+                result: entry.integer("RESULT"),
+                latestSnapshot: entry.dates("SnapshotDates").max()
             )
         }
     }
@@ -83,6 +89,16 @@ extension PlistDictionary {
         case let value as String: Int(value)
         default: nil
         }
+    }
+
+    /// Dates from an array of "2026-01-01 02:55:32 +0000" strings, as `defaults read` prints
+    /// them. Entries that aren't dates are left out.
+    func dates(_ key: String) -> [Date] {
+        guard let values = values[key] as? [Any] else { return [] }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss Z"
+        return values.compactMap { ($0 as? String).flatMap(formatter.date(from:)) ?? ($0 as? Date) }
     }
 
     /// A 0/1 flag stored as a number, boolean or text.

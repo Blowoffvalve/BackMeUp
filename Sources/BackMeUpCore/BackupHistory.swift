@@ -63,6 +63,9 @@ public enum FailureReason: Codable, Equatable, Sendable {
     case result(Int)
     /// `tmutil` exited 0 but the destination's `RESULT` couldn't be read.
     case resultUnreadable
+    /// `tmutil` exited 0 and `RESULT` was 0, but nothing showed the result was from this backup:
+    /// no newer backup appeared on the disk. It may be left over from an earlier one.
+    case notConfirmed
 
     public var description: String {
         switch self {
@@ -70,6 +73,7 @@ public enum FailureReason: Codable, Equatable, Sendable {
         case let .exitCode(code): "Time Machine stopped with code \(code)"
         case let .result(code): "Time Machine reported error \(code)"
         case .resultUnreadable: "couldn't read Time Machine's result"
+        case .notConfirmed: "couldn't tell whether Time Machine finished"
         }
     }
 }

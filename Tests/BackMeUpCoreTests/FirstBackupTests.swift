@@ -18,6 +18,7 @@ struct FirstBackupTests {
         .fails(exitCode: 1, result: nil), // stopped, for example by closing the lid
         .fails(exitCode: 0, result: nil), // tmutil says nothing went wrong, but there's no result
         .fails(exitCode: 1, result: 0), // stopped, and Time Machine reports no error
+        .staleResult, // tmutil exits 0, but there's no new backup on the disk
     ]
 
     @Test(arguments: interruptions)

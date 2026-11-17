@@ -95,6 +95,8 @@ struct SchedulerTests {
         (.fails(exitCode: 0, result: nil), "Last backup failed: couldn't read Time Machine's result"),
         (.fails(exitCode: 1, result: 0), "Last backup failed: Time Machine stopped with code 1"),
         (.fails(exitCode: nil), "Last backup failed: couldn't start Time Machine"),
+        // RESULT 0, but no new backup on the disk: it's left over from an earlier one.
+        (.staleResult, "Last backup failed: couldn't tell whether Time Machine finished"),
     ]
 
     /// After the first success. Before it, some of these are a paused first backup instead.
