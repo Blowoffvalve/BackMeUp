@@ -8,6 +8,7 @@ import BackMeUpCore
 @MainActor
 final class SettingsWindowController: NSObject {
     private let scheduler: Scheduler
+    private let updater: AppUpdater
     private var window: NSWindow?
 
     private let intervalField = NSTextField()
@@ -21,12 +22,14 @@ final class SettingsWindowController: NSObject {
     private let daysStepper = NSStepper()
     private lazy var networkSection = NetworkSettingsSection(scheduler: scheduler)
     private lazy var ntfySection = NtfySettingsSection(scheduler: scheduler)
+    private lazy var updateSection = UpdateSettingsSection(updater: updater)
     private let batteryCheckbox = NSButton(checkboxWithTitle: "Allow backups on battery", target: nil, action: nil)
 
     private static let units: [(BackupInterval.Unit, String)] = [(.hours, "hours"), (.days, "days"), (.weeks, "weeks")]
 
-    init(scheduler: Scheduler) {
+    init(scheduler: Scheduler, updater: AppUpdater) {
         self.scheduler = scheduler
+        self.updater = updater
         super.init()
     }
 
@@ -69,6 +72,8 @@ final class SettingsWindowController: NSObject {
         stack.setCustomSpacing(20, after: stack.arrangedSubviews[stack.arrangedSubviews.count - 2])
         stack.addArrangedSubview(ntfySection.view)
         stack.setCustomSpacing(20, after: networkSection.view)
+        stack.addArrangedSubview(updateSection.view)
+        stack.setCustomSpacing(20, after: ntfySection.view)
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 8
@@ -131,6 +136,7 @@ final class SettingsWindowController: NSObject {
         daysStepper.integerValue = settings.alerts.daysWithoutBackup
         networkSection.reload()
         ntfySection.reload()
+        updateSection.reload()
         batteryCheckbox.state = settings.allowBackupsOnBattery ? .on : .off
     }
 

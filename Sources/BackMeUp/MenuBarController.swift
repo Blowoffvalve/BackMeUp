@@ -8,6 +8,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private static let openMenuRefreshInterval: TimeInterval = 2
 
     private let scheduler: Scheduler
+    private let updater: AppUpdater
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     private let statusLineItem = NSMenuItem(title: "Checking Time Machine…", action: nil, keyEquivalent: "")
     private let nextBackupItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
@@ -19,7 +20,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         keyEquivalent: ""
     )
     private let locationPermission = LocationPermission()
-    private lazy var settingsWindow = SettingsWindowController(scheduler: scheduler)
+    private lazy var settingsWindow = SettingsWindowController(scheduler: scheduler, updater: updater)
     private lazy var checklistWindow = ChecklistWindowController(scheduler: scheduler) { [weak self] in
         self?.openSettings()
     }
@@ -27,8 +28,9 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private var openMenuTimer: Timer?
     private var isTicking = false
 
-    init(scheduler: Scheduler) {
+    init(scheduler: Scheduler, updater: AppUpdater) {
         self.scheduler = scheduler
+        self.updater = updater
         super.init()
 
         drawIcon()
@@ -53,6 +55,11 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menu.addItem(backUpNowItem)
         menu.addItem(checklistItem)
         menu.addItem(settingsItem)
+        if updater.isAvailable {
+            let updateItem = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
+            updateItem.target = self
+            menu.addItem(updateItem)
+        }
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit BackMeUp", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         menu.delegate = self
@@ -103,6 +110,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     @objc private func openChecklist() {
         checklistWindow.show()
+    }
+
+    @objc private func checkForUpdates() {
+        updater.checkForUpdates()
     }
 
     @objc private func openSettings() {

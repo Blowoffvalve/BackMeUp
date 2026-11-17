@@ -61,3 +61,21 @@ struct UpdateTests {
         #expect(harness.system.storedSetupState?.lastLaunchedVersion == "1.0")
     }
 }
+
+/// Builds made before the maintainer adds the real update key must never start the updater.
+struct UpdateKeyTests {
+    @Test(arguments: [
+        (nil, false),
+        ("", false),
+        ("REPLACE_WITH_SPARKLE_PUBLIC_ED_KEY", false),
+        // 31 bytes: too short for an Ed25519 public key.
+        ("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==", false),
+        ("not base64 at all!", false),
+        // 32 bytes in base64: the shape of a real key from Sparkle's generate_keys.
+        ("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", true),
+        (" AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\n", true),
+    ] as [(String?, Bool)])
+    func aPublicKeyIsUsableOnlyIfItIsA32ByteBase64Key(key: String?, usable: Bool) {
+        #expect(UpdateKey.isUsable(key) == usable)
+    }
+}
