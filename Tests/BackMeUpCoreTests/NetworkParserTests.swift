@@ -74,6 +74,86 @@ struct NetworkServiceParserTests {
         let route = DefaultRoute(gateway: "192.0.2.1", interface: "en7")
         #expect(NetworkServiceState.routerHardwareAddress(services: [Self.vpn, Self.wifi], route: route) == nil)
     }
+
+    /// A change to the Wi-Fi service's keys (nil removes the key), and the address it should give.
+    struct Variant: Sendable, CustomTestStringConvertible {
+        var testDescription: String
+        var changes: [String: String?]
+        var expected: String?
+    }
+
+    static let variants: [Variant] = [
+        Variant(
+            testDescription: "upper-case hex is normalised",
+            changes: ["ARPResolvedHardwareAddress": "02:AB:00:00:00:0F"],
+            expected: "02:ab:00:00:00:0f"
+        ),
+        Variant(
+            testDescription: "a malformed ARP-resolved address falls back to the signature",
+            changes: ["ARPResolvedHardwareAddress": "(incomplete)"],
+            expected: "02:00:00:00:00:01"
+        ),
+        Variant(
+            testDescription: "an ARP-resolved address for another IP falls back to the signature",
+            changes: ["ARPResolvedIPAddress": "192.0.2.99", "ARPResolvedHardwareAddress": "02:00:00:00:00:09"],
+            expected: "02:00:00:00:00:01"
+        ),
+        Variant(
+            testDescription: "the signature's fields can come in any order, among others",
+            changes: [
+                "ARPResolvedHardwareAddress": nil,
+                "NetworkSignature": "IPv4.RouterHardwareAddress=02:00:00:00:00:01;Other=x;IPv4.Router=192.0.2.1",
+            ],
+            expected: "02:00:00:00:00:01"
+        ),
+        Variant(
+            testDescription: "a signature without the router's hardware address gives none",
+            changes: ["ARPResolvedHardwareAddress": nil, "NetworkSignature": "IPv4.Router=192.0.2.1"],
+            expected: nil
+        ),
+        Variant(
+            testDescription: "a malformed signature address gives none",
+            changes: [
+                "ARPResolvedHardwareAddress": nil,
+                "NetworkSignature": "IPv4.Router=192.0.2.1;IPv4.RouterHardwareAddress=02:00:00:00:01",
+            ],
+            expected: nil
+        ),
+        Variant(
+            testDescription: "neither key gives none",
+            changes: ["ARPResolvedHardwareAddress": nil, "NetworkSignature": nil],
+            expected: nil
+        ),
+        Variant(
+            testDescription: "an unexpected signature format gives none",
+            changes: ["ARPResolvedHardwareAddress": nil, "NetworkSignature": "garbage"],
+            expected: nil
+        ),
+    ]
+
+    @Test(arguments: variants)
+    func variantsOfTheService(variant: Variant) {
+        var service = Self.wifi
+        for (key, value) in variant.changes {
+            service[key] = value
+        }
+        #expect(NetworkServiceState.routerHardwareAddress(services: [service], route: Self.route) == variant.expected)
+    }
+
+    @Test func valuesOfAnUnexpectedTypeAreIgnored() {
+        var service = Self.wifi
+        service["ARPResolvedHardwareAddress"] = 42
+        service["NetworkSignature"] = ["IPv4.Router": "192.0.2.1"]
+        #expect(NetworkServiceState.routerHardwareAddress(services: [service], route: Self.route) == nil)
+
+        var unnamed = Self.wifi
+        unnamed["InterfaceName"] = 0
+        #expect(NetworkServiceState.routerHardwareAddress(services: [unnamed], route: Self.route) == nil)
+    }
+
+    @Test func noServicesAtAllGiveNoAddress() {
+        #expect(NetworkServiceState.routerHardwareAddress(services: [], route: Self.route) == nil)
+    }
 }
 
 @Suite("Parsing the ARP table (arp -an)")
