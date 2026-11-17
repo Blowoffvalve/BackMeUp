@@ -86,10 +86,10 @@ final class NtfySettingsSection: NSObject, NSTextFieldDelegate {
         testResult.textColor = .secondaryLabelColor
         testResult.stringValue = "Sending…"
         Task {
-            let report = await scheduler.sendTestMessage()
+            let result = await scheduler.sendTestMessage()
             testButton.isEnabled = true
-            testResult.textColor = report.succeeded ? .secondaryLabelColor : .systemRed
-            testResult.stringValue = report.text
+            testResult.textColor = result.succeeded ? .secondaryLabelColor : .systemRed
+            testResult.stringValue = result.message
         }
     }
 

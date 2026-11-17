@@ -24,12 +24,10 @@ struct NtfyTests {
 
         #expect(harness.system.ntfyMessages == [
             NtfyMessage(
-                server: "https://ntfy.example",
-                topic: Self.topic,
-                token: nil,
+               settings: NtfySettings(server: "https://ntfy.example", topic: Self.topic, token: nil),
                 title: "Backup failed",
                 body: "1 backup didn't finish. Time Machine reported error 19.",
-                tags: ["warning"]
+                tags: [.warning]
             ),
         ])
     }
@@ -55,7 +53,7 @@ struct NtfyTests {
 
         let workingAgain = harness.system.ntfyMessages.first { $0.title == "Backups are working again" }
         #expect(workingAgain?.body == "Last backup: today 01:40")
-        #expect(workingAgain?.tags == ["white_check_mark"])
+        #expect(workingAgain?.tags == [.success])
     }
 
     @Test func anOverdueAlertGoesToNtfyWithAWarningTag() async {
@@ -67,7 +65,7 @@ struct NtfyTests {
 
         #expect(harness.system.ntfyMessages.map(\.title) == ["Backups skipped"])
         #expect(harness.system.ntfyMessages.first?.body == harness.notifications.first?.body)
-        #expect(harness.system.ntfyMessages.first?.tags == ["warning"])
+        #expect(harness.system.ntfyMessages.first?.tags == [.warning])
     }
 
     @Test func theAccessTokenIsSentWhenThereIsOne() async {
@@ -76,7 +74,7 @@ struct NtfyTests {
 
         await harness.start()
 
-        #expect(harness.system.ntfyMessages.map(\.token) == ["example-token"])
+        #expect(harness.system.ntfyMessages.map(\.settings.token) == ["example-token"])
     }
 
     @Test func theTopicAndTokenAreKeptInTheKeychainNotInSettings() async {
@@ -125,12 +123,10 @@ struct NtfyTests {
         #expect(harness.system.startedBackups.count > 1)
         #expect(harness.system.ntfyMessages == [
             NtfyMessage(
-                server: "https://ntfy.example",
-                topic: Self.topic,
-                token: nil,
+               settings: NtfySettings(server: "https://ntfy.example", topic: Self.topic, token: nil),
                 title: "First backup finished",
                 body: "Your Mac's first backup finished today 00:20.",
-                tags: ["white_check_mark"]
+                tags: [.success]
             ),
         ])
         #expect(harness.notifications.isEmpty)
@@ -204,16 +200,14 @@ struct NtfyTests {
 
         let report = await harness.scheduler.sendTestMessage()
 
-        #expect(report.succeeded)
-        #expect(report.text == "Test message sent. Check that it arrived on your phone.")
+        #expect(report == .sent)
+        #expect(report.message == "Test message sent. Check that it arrived on your phone.")
         #expect(harness.system.ntfyMessages == [
             NtfyMessage(
-                server: "https://ntfy.example",
-                topic: Self.topic,
-                token: "example-token",
+               settings: NtfySettings(server: "https://ntfy.example", topic: Self.topic, token: "example-token"),
                 title: "BackMeUp test message",
                 body: "Phone alerts from BackMeUp will arrive here.",
-                tags: ["white_check_mark"]
+                tags: [.success]
             ),
         ])
     }
@@ -224,8 +218,8 @@ struct NtfyTests {
 
         let report = await harness.scheduler.sendTestMessage()
 
-        #expect(!report.succeeded)
-        #expect(report.text == "Couldn't send the test message: the server answered 403.")
+        #expect(report == .failed("the server answered 403"))
+        #expect(report.message == "Couldn't send the test message: the server answered 403.")
         #expect(harness.system.logLines.count == 1)
     }
 
@@ -234,8 +228,8 @@ struct NtfyTests {
 
         let report = await harness.scheduler.sendTestMessage()
 
-        #expect(!report.succeeded)
-        #expect(report.text == "Enter a topic first.")
+        #expect(report == .needsTopic)
+        #expect(report.message == "Enter a topic first.")
         #expect(harness.system.ntfyMessages.isEmpty)
     }
 }

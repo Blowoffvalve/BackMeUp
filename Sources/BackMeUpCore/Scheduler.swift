@@ -448,8 +448,8 @@ public final class Scheduler {
     private func send(_ alert: Alert) {
         system.showNotification(alert)
         let tag = switch alert.kind {
-        case .failed, .overdue: NtfyMessage.warningTag
-        case .workingAgain: NtfyMessage.successTag
+        case .failed, .overdue: NtfyTag.warning
+        case .workingAgain: NtfyTag.success
         }
         sendNtfy(title: alert.title, body: alert.body, tag: tag) { _ in }
     }
@@ -467,18 +467,18 @@ public final class Scheduler {
 
     /// The Settings window's "Send test message" button: sends a test message with the saved
     /// ntfy settings, and says whether it worked.
-    public func sendTestMessage() async -> (succeeded: Bool, text: String) {
-        guard ntfy.isSetUp else { return (false, "Enter a topic first.") }
+    public func sendTestMessage() async -> NtfyTestResult {
+        guard ntfy.isSetUp else { return .needsTopic }
         let result = await withCheckedContinuation { continuation in
             sendNtfy(
                 title: "BackMeUp test message",
                 body: "Phone alerts from BackMeUp will arrive here.",
-                tag: NtfyMessage.successTag
+                tag: .success
             ) { continuation.resume(returning: $0) }
         }
         switch result {
-        case .sent: return (true, "Test message sent. Check that it arrived on your phone.")
-        case let .failed(reason): return (false, "Couldn't send the test message: \(reason).")
+        case .sent: return .sent
+        case let .failed(reason): return .failed(reason)
         }
     }
 
@@ -495,7 +495,7 @@ public final class Scheduler {
         sendNtfy(
             title: "First backup finished",
             body: "Your Mac's first backup finished \(format(lastSuccess)).",
-            tag: NtfyMessage.successTag
+            tag: .success
         ) { [weak self] result in
             guard let self else { return }
             sendingFirstBackupMessage = false
@@ -507,9 +507,9 @@ public final class Scheduler {
     }
 
     /// Sends a message through ntfy if it's set up. Never waits for it.
-    private func sendNtfy(title: String, body: String, tag: String, completion: @escaping @MainActor (NtfySendResult) -> Void) {
+    private func sendNtfy(title: String, body: String, tag: NtfyTag, completion: @escaping @MainActor (NtfySendResult) -> Void) {
         guard ntfy.isSetUp else { return }
-        let message = NtfyMessage(server: ntfy.server, topic: ntfy.topic, token: ntfy.token, title: title, body: body, tags: [tag])
+        let message = NtfyMessage(settings: ntfy, title: title, body: body, tags: [tag])
         system.sendNtfy(message) { [weak self] result in
             if case let .failed(reason) = result, let self {
                 system.log("Couldn't send the \"\(title)\" phone alert through ntfy: \(redacted(reason, message))")
@@ -521,7 +521,7 @@ public final class Scheduler {
     /// The text with the message's topic and token blanked out, so neither reaches the log.
     private func redacted(_ text: String, _ message: NtfyMessage) -> String {
         var text = text
-        for secret in [message.topic, message.token ?? ""] where !secret.isEmpty {
+        for secret in [message.settings.topic, message.settings.token ?? ""] where !secret.isEmpty {
             text = text.replacingOccurrences(of: secret, with: "[hidden]")
         }
         return text
