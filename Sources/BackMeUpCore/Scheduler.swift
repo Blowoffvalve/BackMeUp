@@ -72,14 +72,17 @@ public final class Scheduler {
     /// When the next backup is due: the backup interval after the last success, but no sooner than
     /// the retry interval after a failure or skip. With no success yet, straight away.
     public var nextBackupDue: Date {
-        var due = Date.distantPast
-        if let lastSuccess = history.lastSuccess {
-            due = settings.backupInterval.date(after: lastSuccess, in: calendar)
-        }
+        var due = dueByInterval
         if let last = history.attempts.last, last.outcome != .succeeded {
             due = max(due, last.finished.addingTimeInterval(TimeInterval(settings.retryMinutes * 60)))
         }
         return due
+    }
+
+    /// When the next backup is due by the backup interval alone: the interval after the last
+    /// success, or straight away with no success yet. Retries don't move it.
+    private var dueByInterval: Date {
+        history.lastSuccess.map { settings.backupInterval.date(after: $0, in: calendar) } ?? .distantPast
     }
 
     /// Called by the app's timer, and by the test harness at each step of simulated time.
@@ -195,8 +198,7 @@ public final class Scheduler {
     /// rather than at the next retry, if it was due by the backup interval.
     private var isSetupJustFinished: Bool {
         guard let reason = skipReason, reason.isSetupReason, checklist?.allowsBackups == true else { return false }
-        let scheduled = history.lastSuccess.map { settings.backupInterval.date(after: $0, in: calendar) } ?? .distantPast
-        return system.now >= scheduled
+        return system.now >= dueByInterval
     }
 
     // MARK: Networks
@@ -238,8 +240,7 @@ public final class Scheduler {
         guard let reason = skipReason, reason.isNetworkReason, let currentNetwork,
               networks.skipReason(on: currentNetwork) == nil
         else { return false }
-        let scheduled = history.lastSuccess.map { settings.backupInterval.date(after: $0, in: calendar) } ?? .distantPast
-        return system.now >= scheduled
+        return system.now >= dueByInterval
     }
 
     /// Back Up Now: starts a backup straight away, whatever the schedule says. Does nothing while
