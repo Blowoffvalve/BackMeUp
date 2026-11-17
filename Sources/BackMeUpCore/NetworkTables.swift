@@ -104,7 +104,7 @@ public struct ARPTable: Equatable, Sendable {
         entries.first { $0.ip == ip && $0.interface == interface }?.hardwareAddress
     }
 
-    /// `arp` drops leading zeros ("2:0:0:a5:81:7b"). Returns nil for "(incomplete)" and anything
+    /// `arp` drops leading zeros ("2:0:0:0:0:a"). Returns nil for "(incomplete)" and anything
     /// else that isn't six hex bytes.
     static func normalised(hardwareAddress text: String) -> String? {
         let bytes = text.split(separator: ":", omittingEmptySubsequences: false)

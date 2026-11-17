@@ -15,6 +15,6 @@ default            link#24            UCSIg               utun5
 192.0.2.1/32       link#14            UCS                   en0      !
 192.0.2.1          2:0:0:0:0:1        UHLWIir               en0   1196
 192.0.2.20         link#14            UHRLWI                en0     18
-192.0.2.30         2:0:0:a5:81:7b     UHLWI                 en0    748
+192.0.2.30         2:0:0:0:0:a     UHLWI                 en0    748
 192.0.2.40/32      link#14            UCS                   en0      !
 192.0.2.40         2:0:0:0:0:3        UHLWI                 lo0
