@@ -6,11 +6,14 @@ public enum SkipReason: String, Codable, Equatable, Sendable {
     case noDiskSetUp
     /// The backup disk is a local disk that isn't mounted.
     case diskNotConnected
+    /// The Mac is on battery and backups on battery are turned off.
+    case onBattery
 
     public var description: String {
         switch self {
         case .noDiskSetUp: "no Time Machine disk set up"
         case .diskNotConnected: "backup disk not connected"
+        case .onBattery: "on battery"
         }
     }
 }

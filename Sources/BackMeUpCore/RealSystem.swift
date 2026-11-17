@@ -8,6 +8,9 @@ import Foundation
 public final class RealSystem: System {
     public init() {}
 
+    /// The power assertion held while a backup runs on AC power. See `setIdleSleepPrevented`.
+    var sleepAssertion: IOPMAssertionID?
+
     public var now: Date { Date() }
 
     public func readTimeMachineStatus() async -> TimeMachineStatus {
@@ -15,6 +18,13 @@ public final class RealSystem: System {
             return .unknown
         }
         return TimeMachineStatus(statusOutput: result.stdout)
+    }
+
+    public func readBackupProgress() async -> BackupProgress? {
+        guard let result = await Command.run("/usr/bin/tmutil", ["status", "-X"]), result.exitCode == 0 else {
+            return nil
+        }
+        return BackupProgress(statusOutput: result.stdout)
     }
 
     public func readDestinationInfo() async -> DestinationInfo {
