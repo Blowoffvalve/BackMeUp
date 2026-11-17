@@ -42,6 +42,8 @@ final class UninstallableSystem: System {
     func unregisterLoginItem() { base.unregisterLoginItem() }
     func watchPowerSource(_ onChange: @escaping @MainActor () -> Void) { base.watchPowerSource(onChange) }
     func deleteAllSettings() { base.deleteAllSettings() }
+    func openLog() -> Bool { base.openLog() }
+    func deleteLog() { base.deleteLog() }
 
     /// Letting the Mac sleep is always allowed; keeping it awake isn't after Uninstall….
     func setIdleSleepPrevented(_ prevented: Bool) {

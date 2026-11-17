@@ -254,12 +254,15 @@ public final class Scheduler {
 
     /// Called as the app quits: lets the Mac sleep again. Time Machine carries on with any backup
     /// already running.
-    /// After Uninstall…, it deletes the settings once more, in case macOS or a framework saved
+    /// After Uninstall…, it deletes the settings and the log once more, in case macOS or a framework saved
     /// something for BackMeUp while the reminder was showing.
     public func prepareToQuit() {
         backupCommandRunning = false
         updateSleepPrevention()
-        if isUninstalled { system.deleteAllSettings() }
+        if isUninstalled {
+            system.deleteAllSettings()
+            system.deleteLog()
+        }
     }
 
     // MARK: Uninstall
@@ -270,17 +273,23 @@ public final class Scheduler {
     /// reading the Mac, so the checklist isn't shown again.
     public var isUninstalled: Bool { system.isUninstalled }
 
-    /// Uninstall…: removes BackMeUp from Login Items and deletes its settings and every Keychain
-    /// item it made. Time Machine's settings and backups are never touched.
+    /// Uninstall…: removes BackMeUp from Login Items and deletes its settings, its log and every
+    /// Keychain item it made. Time Machine's settings and backups are never touched.
     public func uninstall() {
         system.uninstall()
         backupCommandRunning = false
         updateSleepPrevention()
         system.unregisterLoginItem()
         system.deleteAllSettings()
+        system.deleteLog()
         for secret in Secret.allCases {
             system.saveSecret(nil, as: secret)
         }
+    }
+
+    /// Show Log: opens the log file. Returns false if it couldn't be opened.
+    public func showLog() -> Bool {
+        system.openLog()
     }
 
     /// The uninstall reminder's button: opens Time Machine settings so the user can turn its
@@ -316,6 +325,7 @@ public final class Scheduler {
             }
             let isFirstSuccess = history.lastSuccess == nil && attempt.outcome == .succeeded
             history.record(attempt)
+            system.log(attempt.outcome.logLine)
             if isFirstSuccess, ntfy.isSetUp { history.firstBackupMessagePending = true }
             system.saveHistory(history)
             checkAlerts()
@@ -412,6 +422,7 @@ public final class Scheduler {
 
     /// Delivers an alert on every channel: a Mac notification, and ntfy when it's set up.
     private func send(_ alert: Alert) {
+        system.log("Alert sent: \(alert.title)")
         system.showNotification(alert)
         let tag = switch alert.kind {
         case .failed, .overdue: NtfyTag.warning

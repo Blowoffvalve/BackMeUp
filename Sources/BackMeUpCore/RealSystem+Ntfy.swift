@@ -1,15 +1,12 @@
 import Foundation
-import os
 import Security
 
-/// ntfy, the log and the Keychain for the real Mac.
+/// ntfy and the Keychain for the real Mac.
 extension RealSystem {
     /// The Keychain service BackMeUp's secrets are stored under, one item per `Secret`.
     public static let keychainService = "io.github.blowoffvalve.BackMeUp"
     /// The UserDefaults key for the ntfy server address.
     public static let ntfyServerKey = "ntfyServer"
-
-    private static let logger = Logger(subsystem: "io.github.blowoffvalve.BackMeUp", category: "BackMeUp")
 
     // MARK: ntfy
 
@@ -33,13 +30,6 @@ extension RealSystem {
             }
             completion(result)
         }
-    }
-
-    // MARK: The log
-
-    /// Writes to the unified log (Console.app, subsystem `io.github.blowoffvalve.BackMeUp`).
-    public func log(_ message: String) {
-        Self.logger.notice("\(message, privacy: .public)")
     }
 
     // MARK: Secrets

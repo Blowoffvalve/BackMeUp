@@ -204,8 +204,12 @@ final class FakeSystem: System {
     private(set) var ntfyMessages: [NtfyMessage] = []
     /// How the next ntfy sends turn out.
     var ntfyResult = NtfySendResult.sent
-    /// Every line written to the log.
+    /// Every line written to the log since it was last deleted.
     private(set) var logLines: [String] = []
+    /// Whether the log opens. Nothing real is opened either way.
+    var logOpens = true
+    private(set) var logOpenings = 0
+    private(set) var logDeletions = 0
     /// What's in the Keychain. Survives `SchedulerHarness.restart()`.
     var secrets: [Secret: String] = [:]
     var storedNtfyServer: String?
@@ -216,6 +220,17 @@ final class FakeSystem: System {
     }
 
     func log(_ message: String) { logLines.append(message) }
+
+    func openLog() -> Bool {
+        guard logOpens else { return false }
+        logOpenings += 1
+        return true
+    }
+
+    func deleteLog() {
+        logLines = []
+        logDeletions += 1
+    }
     func loadSecret(_ secret: Secret) -> String? { secrets[secret] }
     func saveSecret(_ value: String?, as secret: Secret) { secrets[secret] = value }
     func loadNtfyServer() -> String? { storedNtfyServer }

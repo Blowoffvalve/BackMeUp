@@ -173,11 +173,13 @@ struct NtfyTests {
 
         await harness.start()
 
-        #expect(harness.system.logLines.count == 1)
-        let line = harness.system.logLines.first ?? ""
-        #expect(line.hasPrefix("Couldn't send the \"Backup failed\" phone alert through ntfy"))
-        #expect(!line.contains(Self.topic))
-        #expect(!line.contains("example-token"))
+        let ntfyLines = harness.system.logLines.filter { $0.contains("ntfy") }
+        #expect(ntfyLines.count == 1)
+        #expect(ntfyLines.first?.hasPrefix("Couldn't send the \"Backup failed\" phone alert through ntfy") == true)
+        for line in harness.system.logLines {
+            #expect(!line.contains(Self.topic))
+            #expect(!line.contains("example-token"))
+        }
     }
 
     @Test func failedSendsNeverHoldBackBackups() async {

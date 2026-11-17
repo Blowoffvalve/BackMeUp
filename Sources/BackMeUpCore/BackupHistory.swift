@@ -99,6 +99,18 @@ public struct BackupAttempt: Codable, Equatable, Sendable {
     }
 }
 
+extension BackupAttempt.Outcome {
+    /// How the log records it. Never names the network.
+    var logLine: String {
+        switch self {
+        case .succeeded: "Backup succeeded"
+        case let .failed(reason): "Backup failed: \(reason.description)"
+        case let .skipped(reason): "Backup skipped: \(reason.description)"
+        case .paused: "First backup paused"
+        }
+    }
+}
+
 /// A tally of every attempt since the last success, kept in full however many attempts
 /// `BackupHistory` drops, so alerts can count and date them correctly.
 public struct SinceLastSuccess: Codable, Equatable, Sendable {

@@ -60,6 +60,9 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             updateItem.target = self
             menu.addItem(updateItem)
         }
+        let showLogItem = NSMenuItem(title: "Show Log", action: #selector(showLog), keyEquivalent: "")
+        showLogItem.target = self
+        menu.addItem(showLogItem)
         menu.addItem(.separator())
         let uninstallItem = NSMenuItem(title: "Uninstall…", action: #selector(uninstall), keyEquivalent: "")
         uninstallItem.target = self
@@ -121,6 +124,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     @objc private func openSettings() {
         settingsWindow.show()
+    }
+
+    @objc private func showLog() {
+        if !scheduler.showLog() { NSSound.beep() }
     }
 
     @objc private func uninstall() {

@@ -77,8 +77,13 @@ public protocol System {
     /// when it has been sent or has failed. Never waits for the network itself.
     func sendNtfy(_ message: NtfyMessage, completion: @escaping @MainActor (NtfySendResult) -> Void)
 
-    /// Writes a line to BackMeUp's log. Never pass it a secret.
+    /// Writes a line to BackMeUp's log, a plain-text file the user can open with Show Log. Never
+    /// pass it a secret, a network's name or a router's address.
     func log(_ message: String)
+    /// Opens the log file for the user. Returns false if it couldn't be opened.
+    func openLog() -> Bool
+    /// Deletes the log file, for Uninstall….
+    func deleteLog()
 
     /// Secret storage: the Keychain. nil deletes the value.
     func loadSecret(_ secret: Secret) -> String?
