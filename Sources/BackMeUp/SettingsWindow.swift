@@ -19,6 +19,7 @@ final class SettingsWindowController: NSObject {
     private let failuresStepper = NSStepper()
     private let daysField = NSTextField()
     private let daysStepper = NSStepper()
+    private lazy var networkSection = NetworkSettingsSection(scheduler: scheduler)
     private let batteryCheckbox = NSButton(checkboxWithTitle: "Allow backups on battery", target: nil, action: nil)
 
     private static let units: [(BackupInterval.Unit, String)] = [(.hours, "hours"), (.days, "days"), (.weeks, "weeks")]
@@ -63,6 +64,8 @@ final class SettingsWindowController: NSObject {
             daysRow,
             note("Skipped backups never count as failures, but they do count towards days without a backup."),
         ])
+        stack.addArrangedSubview(networkSection.view)
+        stack.setCustomSpacing(20, after: stack.arrangedSubviews[stack.arrangedSubviews.count - 2])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 8
@@ -123,6 +126,7 @@ final class SettingsWindowController: NSObject {
         failuresStepper.integerValue = settings.alerts.failuresInARow
         daysField.integerValue = settings.alerts.daysWithoutBackup
         daysStepper.integerValue = settings.alerts.daysWithoutBackup
+        networkSection.reload()
         batteryCheckbox.state = settings.allowBackupsOnBattery ? .on : .off
     }
 

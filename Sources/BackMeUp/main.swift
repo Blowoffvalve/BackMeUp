@@ -11,6 +11,7 @@ MainActor.assumeIsolated {
             await scheduler.refreshStatus()
             print(scheduler.statusLine)
             print(scheduler.nextBackupLine)
+            print(scheduler.networkLine)
             // Also checks that Time Machine's preferences can be read and parsed.
             let preferences = await system.readPreferences()
             print(preferences == nil ? "Can't read Time Machine's preferences" : "Read Time Machine's preferences")

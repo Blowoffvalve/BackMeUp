@@ -203,6 +203,27 @@ struct AlertTests {
         #expect(harness.notifications.map(\.kind) == [.overdue, .workingAgain])
     }
 
+    nonisolated static let networkSkips: [(NetworkReading, String)] = [
+        (.router(address: "02:00:00:00:00:02", wifiName: "Cafe"), "Your Mac hasn't been on a chosen network since Friday."),
+        (.none, "Your Mac hasn't been on a chosen network since Friday."),
+        (.routerAddressUnknown, "BackMeUp hasn't been able to identify your Mac's network since Friday."),
+    ]
+
+    @Test(arguments: networkSkips)
+    func daysAwayFromAChosenNetworkNameTheNetwork(network: NetworkReading, sentence: String) async {
+        let harness = harnessWithNetworkDisk()
+        harness.at(minutes: 30) { $0.network = network }
+
+        await harness.start() // backs up at home, Thursday 00:00 to 00:20
+        await harness.advance(minutes: 3 * 24 * 60)
+
+        #expect(harness.notifications == [Alert(
+            kind: .overdue,
+            title: "Backups skipped",
+            body: "No backup for 3 days. \(sentence)"
+        )])
+    }
+
     @Test func daysOnBatteryWithBatteryBackupsOffNameTheBattery() async {
         let harness = harnessWithNetworkDisk()
         harness.changeSettings { $0.allowBackupsOnBattery = false }

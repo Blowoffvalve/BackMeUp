@@ -12,6 +12,13 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private let statusLineItem = NSMenuItem(title: "Checking Time Machine…", action: nil, keyEquivalent: "")
     private let nextBackupItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let backUpNowItem = NSMenuItem(title: "Back Up Now", action: #selector(backUpNow), keyEquivalent: "")
+    private let networkItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+    private let allowNetworkItem = NSMenuItem(
+        title: "Allow backups on this network",
+        action: #selector(allowCurrentNetwork),
+        keyEquivalent: ""
+    )
+    private let locationPermission = LocationPermission()
     private lazy var settingsWindow = SettingsWindowController(scheduler: scheduler)
     private var backgroundTimer: Timer?
     private var openMenuTimer: Timer?
@@ -32,6 +39,11 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         settingsItem.target = self
         menu.addItem(statusLineItem)
         menu.addItem(nextBackupItem)
+        menu.addItem(.separator())
+        networkItem.isEnabled = false
+        allowNetworkItem.target = self
+        menu.addItem(networkItem)
+        menu.addItem(allowNetworkItem)
         menu.addItem(.separator())
         menu.addItem(backUpNowItem)
         menu.addItem(settingsItem)
@@ -65,6 +77,21 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     @objc private func backUpNow() {
         scheduler.backUpNow()
+    }
+
+    /// Labels the network with its Wi-Fi name when Location permission allows it, and otherwise
+    /// asks the user to name it.
+    @objc private func allowCurrentNetwork() {
+        Task {
+            await locationPermission.requestIfNeeded()
+            await scheduler.refreshStatus()
+            guard scheduler.canAllowCurrentNetwork else { return }
+            if let wifiName = scheduler.currentNetworkWiFiName {
+                scheduler.allowCurrentNetwork(label: wifiName)
+            } else if let name = NetworkNamePrompt.ask() {
+                scheduler.allowCurrentNetwork(label: name)
+            }
+        }
     }
 
     @objc private func openSettings() {
@@ -106,6 +133,9 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         nextBackupItem.title = scheduler.nextBackupLine
         nextBackupItem.isHidden = scheduler.nextBackupLine.isEmpty
         backUpNowItem.isEnabled = !scheduler.isBackingUp
+        networkItem.title = scheduler.networkLine
+        networkItem.isHidden = scheduler.networkLine.isEmpty
+        allowNetworkItem.isHidden = !scheduler.canAllowCurrentNetwork
         drawIcon()
     }
 

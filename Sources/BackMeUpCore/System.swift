@@ -26,6 +26,14 @@ public protocol System {
     /// Returns the exit code, or nil if the command couldn't be run.
     func startBackup() async -> Int32?
 
+    /// The network the Mac is on, identified by its router's hardware address: the default route
+    /// on a physical interface (never a VPN), looked up in the ARP table. Sends nothing on the
+    /// network. The Wi-Fi name is included only when Location permission allows it.
+    func readNetwork() async -> NetworkReading
+
+    /// Chosen networks and the "all networks" switch. Values survive app restarts.
+    func loadNetworks() -> NetworkSettings?
+    func saveNetworks(_ networks: NetworkSettings)
     /// What the Mac is running on right now.
     var powerSource: PowerSource { get }
 

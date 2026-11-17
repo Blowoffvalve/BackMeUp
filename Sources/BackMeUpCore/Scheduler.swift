@@ -13,6 +13,13 @@ public final class Scheduler {
 
     public private(set) var settings: BackupSettings
     public private(set) var history: BackupHistory
+    /// Chosen networks and the "all networks" switch, for the Settings window.
+    public private(set) var networks: NetworkSettings
+    /// The network the Mac was on at the last tick or refresh, or nil before the first one.
+    public private(set) var currentNetwork: NetworkReading?
+    /// The menu's network line: the current network's label and whether backups may run on it.
+    /// Never shows the router's hardware address.
+    public private(set) var networkLine = ""
 
     /// The menu's first line: the last backup, or what went wrong with it.
     public private(set) var statusLine = ""
@@ -35,6 +42,7 @@ public final class Scheduler {
         self.calendar = calendar
         settings = system.loadSettings()?.validated ?? .standard
         history = system.loadHistory() ?? BackupHistory()
+        networks = system.loadNetworks() ?? NetworkSettings()
         describe()
     }
 
@@ -62,9 +70,10 @@ public final class Scheduler {
     /// Called by the app's timer, and by the test harness at each step of simulated time.
     public func tick() async {
         timeMachineStatus = await system.readTimeMachineStatus()
+        currentNetwork = await system.readNetwork()
         await readProgress()
         updateSleepPrevention()
-        if !isBackingUp, timeMachineStatus != .running, system.now >= nextBackupDue {
+        if !isBackingUp, timeMachineStatus != .running, system.now >= nextBackupDue || isBackOnAChosenNetwork {
             startAttempt(byPerson: false)
         }
         checkAlerts()
@@ -74,8 +83,50 @@ public final class Scheduler {
     /// Re-reads Time Machine's state for the menu without ever starting a backup.
     public func refreshStatus() async {
         timeMachineStatus = await system.readTimeMachineStatus()
+        currentNetwork = await system.readNetwork()
         await readProgress()
         describe()
+    }
+
+    // MARK: Networks
+
+    /// Whether the menu should offer "Allow backups on this network": the current network is
+    /// identified, isn't chosen yet, and "all networks" is off.
+    public var canAllowCurrentNetwork: Bool {
+        guard !networks.allNetworks, case let .router(address, _)? = currentNetwork else { return false }
+        return networks.network(routerAddress: address) == nil
+    }
+
+    /// The current network's Wi-Fi name, when Location permission allows it. Without one, the app
+    /// asks the user to name the network.
+    public var currentNetworkWiFiName: String? {
+        if case let .router(_, wifiName)? = currentNetwork { wifiName } else { nil }
+    }
+
+    /// "Allow backups on this network": adds the current network under `label`. Does nothing if
+    /// it can't be identified or is already chosen. A backup waiting for it starts at the next tick.
+    public func allowCurrentNetwork(label: String) {
+        guard canAllowCurrentNetwork, case let .router(address, _)? = currentNetwork else { return }
+        networks.chosen.append(ChosenNetwork(routerAddress: address, label: label))
+        system.saveNetworks(networks)
+        describe()
+    }
+
+    /// Saves chosen networks (renamed or removed in Settings) and the "all networks" switch.
+    public func updateNetworks(_ newNetworks: NetworkSettings) {
+        networks = newNetworks
+        system.saveNetworks(networks)
+        describe()
+    }
+
+    /// A backup skipped for the network can start as soon as the Mac is on a chosen network,
+    /// rather than at the next retry, if it was due by the backup interval.
+    private var isBackOnAChosenNetwork: Bool {
+        guard let reason = skipReason, reason.isNetworkReason, let currentNetwork,
+              networks.skipReason(on: currentNetwork) == nil
+        else { return false }
+        let scheduled = history.lastSuccess.map { settings.backupInterval.date(after: $0, in: calendar) } ?? .distantPast
+        return system.now >= scheduled
     }
 
     /// Back Up Now: starts a backup straight away, whatever the schedule says. Does nothing while
@@ -137,6 +188,17 @@ public final class Scheduler {
         case .unknown:
             // Can't tell which disk: let Time Machine try, and judge it by its result.
             destinationID = nil
+        }
+
+        // Network rules hold back network disks, and a disk we can't identify, but never a local one.
+        if case let .configured(disk) = destination, disk.kind == .local {
+            // No network rule.
+        } else {
+            let network = await system.readNetwork()
+            currentNetwork = network
+            if let reason = networks.skipReason(on: network) {
+                return BackupAttempt(started: started, finished: started, outcome: .skipped(reason))
+            }
         }
 
         backupCommandRunning = true
@@ -280,6 +342,7 @@ public final class Scheduler {
     }
 
     private func updateLines() {
+        updateNetworkLine()
         if isBackingUp || timeMachineStatus == .running {
             statusLine = progressLine
             nextBackupLine = ""
@@ -289,6 +352,8 @@ public final class Scheduler {
         switch history.attempts.last?.outcome {
         case let .failed(reason)?:
             statusLine = "Last backup failed: \(reason.description)"
+        case .skipped(.notOnChosenNetwork)?:
+            statusLine = "Waiting for a chosen network"
         case let .skipped(reason)?:
             statusLine = "Backup skipped: \(reason.description)"
         case .paused?:
@@ -304,6 +369,24 @@ public final class Scheduler {
         case .failed, .skipped: "Next try"
         }
         nextBackupLine = due <= system.now ? "\(label): now" : "\(label): \(format(due))"
+    }
+
+    private func updateNetworkLine() {
+        switch currentNetwork {
+        case nil:
+            networkLine = ""
+        case .none?:
+            networkLine = "Network: not connected"
+        case .routerAddressUnknown?:
+            networkLine = "Network: not identified yet"
+        case let .router(address, wifiName)?:
+            let chosen = networks.network(routerAddress: address)
+            let label = chosen?.label ?? wifiName ?? "this network"
+            let state = if chosen != nil { "backups allowed" }
+                else if networks.allNetworks { "all networks allowed" }
+                else { "not chosen" }
+            networkLine = "Network: \(label) (\(state))"
+        }
     }
 
     /// "today 14:02", "yesterday 09:15", "tomorrow 14:02", or "3 Jan 14:02".
