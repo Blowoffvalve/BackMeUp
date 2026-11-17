@@ -8,7 +8,8 @@ public final class Scheduler {
     /// How often the app ticks the scheduler in the background, in seconds.
     public static let tickInterval: TimeInterval = 60
 
-    private let system: any System
+    /// The outside world. After Uninstall… it drops every save, backup start and message.
+    private let system: UninstallableSystem
     private let calendar: Calendar
     private var ntfySender: NtfySender { NtfySender(system: system) }
 
@@ -49,7 +50,7 @@ public final class Scheduler {
     private var backupCommandRunning = false
 
     public init(system: any System, calendar: Calendar = .current) {
-        self.system = system
+        self.system = UninstallableSystem(system)
         self.calendar = calendar
         settings = system.loadSettings()?.validated ?? .standard
         history = system.loadHistory() ?? BackupHistory()
@@ -145,7 +146,6 @@ public final class Scheduler {
     /// Adds BackMeUp to Login Items. Done once on first run; if macOS refuses or wants approval,
     /// check 4 says how to add it by hand.
     public func registerLoginItem() {
-        guard !isUninstalled else { return }
         _ = system.registerLoginItem()
     }
 
@@ -220,7 +220,6 @@ public final class Scheduler {
     /// "Allow backups on this network": adds the current network under `label`. Does nothing if
     /// it can't be identified or is already chosen. A backup waiting for it starts at the next tick.
     public func allowCurrentNetwork(label: String) {
-        guard !isUninstalled else { return }
         guard canAllowCurrentNetwork, case let .router(address, _)? = currentNetwork else { return }
         networks.chosen.append(ChosenNetwork(routerAddress: address, label: label))
         system.saveNetworks(networks)
@@ -229,7 +228,6 @@ public final class Scheduler {
 
     /// Saves chosen networks (renamed or removed in Settings) and the "all networks" switch.
     public func updateNetworks(_ newNetworks: NetworkSettings) {
-        guard !isUninstalled else { return }
         networks = newNetworks
         system.saveNetworks(networks)
         describe()
@@ -265,13 +263,15 @@ public final class Scheduler {
     // MARK: Uninstall
 
     /// Whether Uninstall… has run. From then on BackMeUp starts no backups, sends no alerts and
-    /// saves nothing, while the app shows its reminder and quits.
-    public private(set) var isUninstalled = false
+    /// saves nothing, while the app shows its reminder and quits. `UninstallableSystem` enforces
+    /// it for every save; the scheduler's entry points (ticks, refreshes, Back Up Now) also stop
+    /// reading the Mac, so the checklist isn't shown again.
+    public var isUninstalled: Bool { system.isUninstalled }
 
     /// Uninstall…: removes BackMeUp from Login Items and deletes its settings and every Keychain
     /// item it made. Time Machine's settings and backups are never touched.
     public func uninstall() {
-        isUninstalled = true
+        system.uninstall()
         backupCommandRunning = false
         updateSleepPrevention()
         system.unregisterLoginItem()
@@ -295,7 +295,6 @@ public final class Scheduler {
 
     /// Saves new settings, raised to the minimums.
     public func updateSettings(_ newSettings: BackupSettings) {
-        guard !isUninstalled else { return }
         settings = newSettings.validated
         system.saveSettings(settings)
         describe()
@@ -424,7 +423,6 @@ public final class Scheduler {
 
     /// Sends an alert if one is due, or "working again" on the first success after an alert.
     private func checkAlerts() {
-        guard !isUninstalled else { return }
         if history.lastAlertSent != nil, let lastSuccess = history.lastSuccess,
            history.attempts.last?.outcome == .succeeded {
             history.lastAlertSent = nil
@@ -459,7 +457,6 @@ public final class Scheduler {
 
     /// Saves where phone alerts go. The topic and token go to the Keychain.
     public func updateNtfy(_ newSettings: NtfySettings) {
-        guard !isUninstalled else { return }
         ntfy = newSettings.cleaned
         system.saveNtfyServer(ntfy.server)
         system.saveSecret(ntfy.isSetUp ? ntfy.topic : nil, as: .ntfyTopic)
@@ -490,7 +487,7 @@ public final class Scheduler {
         ) { [weak self] result in
             guard let self else { return }
             sendingFirstBackupMessage = false
-            if result == .sent, !isUninstalled {
+            if result == .sent {
                 history.firstBackupMessagePending = nil
                 system.saveHistory(history)
             }

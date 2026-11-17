@@ -70,8 +70,12 @@ struct UninstallTests {
         harness.changeNetworks { $0.allNetworks = true }
         harness.scheduler.allowCurrentNetwork(label: "Somewhere")
         harness.scheduler.updateNtfy(NtfySettings(server: "https://ntfy.example", topic: "example-topic", token: "example-token"))
+        harness.scheduler.registerLoginItem()
+        let ntfySent = harness.system.ntfyMessages.count
+        _ = await harness.scheduler.sendTestMessage()
         harness.quit()
 
+        #expect(harness.system.ntfyMessages.count == ntfySent)
         #expect(harness.system.loginItemRegistrations == 1)
         #expect(harness.system.loginItemStatus == .notRegistered)
         #expect(harness.system.secrets.isEmpty)
