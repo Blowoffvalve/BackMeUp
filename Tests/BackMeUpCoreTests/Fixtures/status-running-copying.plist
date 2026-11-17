@@ -12,30 +12,28 @@
 	<string>00000000-0000-0000-0000-000000000001</string>
 	<key>DestinationMountPoint</key>
 	<string>/Volumes/Backups of Example Mac</string>
-	<key>Percent</key>
-	<real>0.25</real>
+	<key>FractionOfProgressBar</key>
+	<real>0.90000000000000002</real>
 	<key>Progress</key>
 	<dict>
 		<key>Percent</key>
-		<real>0.25</real>
-		<key>TimeRemaining</key>
-		<integer>3600</integer>
+		<real>0.0066898739727356332</real>
 		<key>_raw_Percent</key>
-		<real>0.25</real>
+		<real>0.0066898739727356332</real>
 		<key>_raw_totalBytes</key>
-		<integer>4000000000</integer>
+		<integer>251554357248</integer>
 		<key>bytes</key>
-		<integer>1000000000</integer>
+		<integer>0</integer>
 		<key>files</key>
-		<integer>25000</integer>
+		<integer>9</integer>
 		<key>totalBytes</key>
-		<integer>4000000000</integer>
+		<integer>251554357248</integer>
 		<key>totalFiles</key>
-		<integer>100000</integer>
+		<integer>2637685</integer>
 	</dict>
 	<key>Running</key>
 	<true/>
-	<key>Stopping</key>
-	<integer>0</integer>
+	<key>attemptOptions</key>
+	<integer>257</integer>
 </dict>
 </plist>
