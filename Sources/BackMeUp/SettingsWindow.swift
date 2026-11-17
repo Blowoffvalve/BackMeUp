@@ -20,6 +20,7 @@ final class SettingsWindowController: NSObject {
     private let daysField = NSTextField()
     private let daysStepper = NSStepper()
     private lazy var networkSection = NetworkSettingsSection(scheduler: scheduler)
+    private lazy var ntfySection = NtfySettingsSection(scheduler: scheduler)
     private let batteryCheckbox = NSButton(checkboxWithTitle: "Allow backups on battery", target: nil, action: nil)
 
     private static let units: [(BackupInterval.Unit, String)] = [(.hours, "hours"), (.days, "days"), (.weeks, "weeks")]
@@ -66,6 +67,8 @@ final class SettingsWindowController: NSObject {
         ])
         stack.addArrangedSubview(networkSection.view)
         stack.setCustomSpacing(20, after: stack.arrangedSubviews[stack.arrangedSubviews.count - 2])
+        stack.addArrangedSubview(ntfySection.view)
+        stack.setCustomSpacing(20, after: networkSection.view)
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 8
@@ -127,6 +130,7 @@ final class SettingsWindowController: NSObject {
         daysField.integerValue = settings.alerts.daysWithoutBackup
         daysStepper.integerValue = settings.alerts.daysWithoutBackup
         networkSection.reload()
+        ntfySection.reload()
         batteryCheckbox.state = settings.allowBackupsOnBattery ? .on : .off
     }
 

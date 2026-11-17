@@ -15,6 +15,8 @@ public final class Scheduler {
     public private(set) var history: BackupHistory
     /// Chosen networks and the "all networks" switch, for the Settings window.
     public private(set) var networks: NetworkSettings
+    /// Where phone alerts go through ntfy, if anywhere.
+    public private(set) var ntfy: NtfySettings
     /// The network the Mac was on at the last tick or refresh, or nil before the first one.
     public private(set) var currentNetwork: NetworkReading?
     /// The menu's network line: the current network's label and whether backups may run on it.
@@ -43,6 +45,11 @@ public final class Scheduler {
         settings = system.loadSettings()?.validated ?? .standard
         history = system.loadHistory() ?? BackupHistory()
         networks = system.loadNetworks() ?? NetworkSettings()
+        ntfy = NtfySettings(
+            server: system.loadNtfyServer() ?? NtfySettings.defaultServer,
+            topic: system.loadSecret(.ntfyTopic) ?? "",
+            token: system.loadSecret(.ntfyToken)
+        )
         describe()
     }
 
@@ -162,9 +169,12 @@ public final class Scheduler {
         guard backupTask == nil else { return }
         backupTask = Task {
             let attempt = await runAttempt(byPerson: byPerson)
+            let isFirstSuccess = history.lastSuccess == nil && attempt.outcome == .succeeded
             history.record(attempt)
+            if isFirstSuccess, ntfy.isSetUp { history.firstBackupMessagePending = true }
             system.saveHistory(history)
             checkAlerts()
+            sendFirstBackupMessageIfPending()
             backupTask = nil
             describe()
         }
@@ -285,10 +295,86 @@ public final class Scheduler {
         send(alert)
     }
 
-    /// Delivers an alert on every channel: a Mac notification now; other channels, such as ntfy,
-    /// are added here, all with the same `Alert`.
+    /// Delivers an alert on every channel: a Mac notification, and ntfy when it's set up.
     private func send(_ alert: Alert) {
         system.showNotification(alert)
+        let tag = switch alert.kind {
+        case .failed, .overdue: NtfyMessage.warningTag
+        case .workingAgain: NtfyMessage.successTag
+        }
+        sendNtfy(title: alert.title, body: alert.body, tag: tag) { _ in }
+    }
+
+    // MARK: ntfy
+
+    /// Saves where phone alerts go. The topic and token go to the Keychain.
+    public func updateNtfy(_ newSettings: NtfySettings) {
+        ntfy = newSettings.cleaned
+        system.saveNtfyServer(ntfy.server)
+        system.saveSecret(ntfy.isSetUp ? ntfy.topic : nil, as: .ntfyTopic)
+        system.saveSecret(ntfy.token, as: .ntfyToken)
+    }
+
+    /// The Settings window's "Send test message" button: sends a test message with the saved
+    /// ntfy settings, and says whether it worked.
+    public func sendTestMessage() async -> (succeeded: Bool, text: String) {
+        guard ntfy.isSetUp else { return (false, "Enter a topic first.") }
+        let result = await withCheckedContinuation { continuation in
+            sendNtfy(
+                title: "BackMeUp test message",
+                body: "Phone alerts from BackMeUp will arrive here.",
+                tag: NtfyMessage.successTag
+            ) { continuation.resume(returning: $0) }
+        }
+        switch result {
+        case .sent: return (true, "Test message sent. Check that it arrived on your phone.")
+        case let .failed(reason): return (false, "Couldn't send the test message: \(reason).")
+        }
+    }
+
+    /// Whether the "First backup finished" message is being sent right now.
+    private var sendingFirstBackupMessage = false
+
+    /// Sends the one-time "First backup finished" message, if it's still to be sent. A failed send
+    /// is tried again after the next backup attempt.
+    private func sendFirstBackupMessageIfPending() {
+        guard history.firstBackupMessagePending == true, ntfy.isSetUp, !sendingFirstBackupMessage,
+              let lastSuccess = history.attempts.first(where: { $0.outcome == .succeeded })?.finished ?? history.lastSuccess
+        else { return }
+        sendingFirstBackupMessage = true
+        sendNtfy(
+            title: "First backup finished",
+            body: "Your Mac's first backup finished \(format(lastSuccess)).",
+            tag: NtfyMessage.successTag
+        ) { [weak self] result in
+            guard let self else { return }
+            sendingFirstBackupMessage = false
+            if result == .sent {
+                history.firstBackupMessagePending = nil
+                system.saveHistory(history)
+            }
+        }
+    }
+
+    /// Sends a message through ntfy if it's set up. Never waits for it.
+    private func sendNtfy(title: String, body: String, tag: String, completion: @escaping @MainActor (NtfySendResult) -> Void) {
+        guard ntfy.isSetUp else { return }
+        let message = NtfyMessage(server: ntfy.server, topic: ntfy.topic, token: ntfy.token, title: title, body: body, tags: [tag])
+        system.sendNtfy(message) { [weak self] result in
+            if case let .failed(reason) = result, let self {
+                system.log("Couldn't send the \"\(title)\" phone alert through ntfy: \(redacted(reason, message))")
+            }
+            completion(result)
+        }
+    }
+
+    /// The text with the message's topic and token blanked out, so neither reaches the log.
+    private func redacted(_ text: String, _ message: NtfyMessage) -> String {
+        var text = text
+        for secret in [message.topic, message.token ?? ""] where !secret.isEmpty {
+            text = text.replacingOccurrences(of: secret, with: "[hidden]")
+        }
+        return text
     }
 
     // MARK: Progress

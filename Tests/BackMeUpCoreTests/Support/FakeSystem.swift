@@ -127,6 +127,29 @@ final class FakeSystem: System {
         notifications.append((now, alert))
     }
 
+    // MARK: ntfy, the log and secrets
+
+    /// Every ntfy message sent through the port. Nothing real is sent.
+    private(set) var ntfyMessages: [NtfyMessage] = []
+    /// How the next ntfy sends turn out.
+    var ntfyResult = NtfySendResult.sent
+    /// Every line written to the log.
+    private(set) var logLines: [String] = []
+    /// What's in the Keychain. Survives `SchedulerHarness.restart()`.
+    var secrets: [Secret: String] = [:]
+    var storedNtfyServer: String?
+
+    func sendNtfy(_ message: NtfyMessage, completion: @escaping @MainActor (NtfySendResult) -> Void) {
+        ntfyMessages.append(message)
+        completion(ntfyResult)
+    }
+
+    func log(_ message: String) { logLines.append(message) }
+    func loadSecret(_ secret: Secret) -> String? { secrets[secret] }
+    func saveSecret(_ value: String?, as secret: Secret) { secrets[secret] = value }
+    func loadNtfyServer() -> String? { storedNtfyServer }
+    func saveNtfyServer(_ server: String) { storedNtfyServer = server }
+
     func loadHistory() -> BackupHistory? { storedHistory }
     func saveHistory(_ history: BackupHistory) { storedHistory = history }
     func loadSettings() -> BackupSettings? { storedSettings }
