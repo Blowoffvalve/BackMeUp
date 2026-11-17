@@ -207,6 +207,18 @@ struct ChecklistTests {
         #expect(harness.system.openedSettings.isEmpty)
     }
 
+    @Test func alertsNeverAskForNotificationPermissionOnlyCheck5Does() async {
+        let harness = harnessWithNetworkDisk()
+        harness.system.notificationPermission = .notDetermined
+        harness.system.nextBackup = .fails(result: 19)
+
+        await harness.start()
+        await harness.advance(minutes: 2 * 24 * 60)
+
+        #expect(harness.notifications.count >= 2)
+        #expect(harness.system.notificationPermissionRequests == 0)
+    }
+
     @Test func notificationsTurnedOffSendTheUserToNotificationSettings() async {
         let harness = harnessWithNetworkDisk()
         harness.system.notificationPermission = .denied

@@ -56,15 +56,17 @@ public final class RealSystem: System {
 
     private let notificationDelegate = NotificationDelegate()
 
-    /// Posts a Mac notification. Asks for permission the first time; if it's refused, the
-    /// notification is dropped (the menu bar icon still shows the problem).
+    /// Posts a Mac notification if notifications are allowed. Never asks for permission: only
+    /// checklist check 5 does. Without permission the notification is dropped (the menu bar icon
+    /// still shows the problem).
     public func showNotification(_ alert: Alert) {
         // UNUserNotificationCenter needs an app bundle; outside one (e.g. `swift run`) it traps.
         guard Bundle.main.bundleIdentifier != nil else { return }
         let center = UNUserNotificationCenter.current()
         center.delegate = notificationDelegate
         Task {
-            guard (try? await center.requestAuthorization(options: [.alert, .sound])) == true else { return }
+            let status = await center.notificationSettings().authorizationStatus
+            guard NotificationPermission(status) == .allowed else { return }
             let content = UNMutableNotificationContent()
             content.title = alert.title
             content.body = alert.body

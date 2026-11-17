@@ -42,7 +42,8 @@ public protocol System {
     /// the lid still sleeps it. Calling it again with the same value does nothing.
     func setIdleSleepPrevented(_ prevented: Bool)
 
-    /// Shows an alert as a Mac notification.
+    /// Shows an alert as a Mac notification, if notifications are allowed. Never asks for
+    /// permission; only `requestNotificationPermission()` does, from checklist check 5.
     func showNotification(_ alert: Alert)
 
     /// Whether BackMeUp opens at login.
