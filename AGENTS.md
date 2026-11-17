@@ -6,6 +6,10 @@ A free, open-source macOS menu bar app that runs Time Machine backups on a sched
 
 - Nothing personal goes in this repo: no real names, Wi-Fi names, IP or hardware addresses, hostnames, or volume names. The GitHub username in URLs and the bundle ID is the only exception. Replace personal values in saved command output before committing it.
 
+## Building and testing
+
+`scripts/test.sh` runs the tests and `scripts/build-app.sh` builds `build/BackMeUp.app`, with the Command Line Tools only. See `docs/agents/building.md` for the layout, how to write tests and toolchain quirks.
+
 ## Agent skills
 
 ### Issue tracker

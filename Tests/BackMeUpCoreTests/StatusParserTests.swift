@@ -7,8 +7,9 @@ struct StatusParserTests {
         #expect(TimeMachineStatus(statusOutput: try fixture("status-idle.plist")) == .idle)
     }
 
-    @Test func runningBackup() throws {
-        #expect(TimeMachineStatus(statusOutput: try fixture("status-running.plist")) == .running)
+    @Test(arguments: ["status-running-mounting.plist", "status-running-copying.plist"])
+    func runningBackup(fixtureName: String) throws {
+        #expect(TimeMachineStatus(statusOutput: try fixture(fixtureName)) == .running)
     }
 
     @Test(arguments: [
