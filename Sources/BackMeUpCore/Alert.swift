@@ -12,6 +12,9 @@ public struct Alert: Equatable, Sendable {
         case overdue
         /// The first success after an alert.
         case workingAgain
+        /// The backup disk can be reached on a network that isn't chosen, perhaps after a new
+        /// router: should backups be allowed on it? A Mac notification only.
+        case chooseNetwork
     }
 
     public var kind: Kind

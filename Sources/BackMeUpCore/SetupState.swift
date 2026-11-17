@@ -32,6 +32,9 @@ public struct SetupState: Codable, Equatable, Sendable {
     /// The app version (`CFBundleVersion`) that last launched, to spot the first launch after an
     /// update. nil if it was never recorded, for example by a version from before updates existed.
     public var lastLaunchedVersion: String?
+    /// Router addresses of networks BackMeUp has already asked about allowing (after a new
+    /// router, say), so it asks only once per network. nil in state saved before it existed.
+    public var networksAskedAbout: [String]?
 
     public init(firstRunDone: Bool = false, lastLaunchedVersion: String? = nil) {
         self.firstRunDone = firstRunDone

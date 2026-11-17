@@ -105,6 +105,7 @@ public final class Scheduler {
             setupState.lastLaunchedVersion = system.appVersion
             system.saveSetupState(setupState)
         }
+        askToChooseThisNetworkIfNeeded()
         updateSleepPrevention()
         if !isBackingUp, timeMachineStatus != .running,
            system.now >= nextBackupDue || isBackOnAChosenNetwork || isSetupJustFinished {
@@ -176,8 +177,10 @@ public final class Scheduler {
     /// Re-reads everything the checklist checks, and asks for the checklist to be shown if
     /// something needs the user.
     private func readChecklist() async {
+        let destination = await system.readDestinationInfo()
+        self.destination = destination
         let checklist = Checklist(ChecklistInputs(
-            destination: await system.readDestinationInfo(),
+            destination: destination,
             preferences: await system.readPreferences(),
             networks: networks,
             loginItem: system.readLoginItemStatus(),
@@ -242,6 +245,29 @@ public final class Scheduler {
               networks.skipReason(on: currentNetwork) == nil
         else { return false }
         return system.now >= dueByInterval
+    }
+
+    /// Time Machine's backup disk as of the last checklist reading.
+    private var destination: DestinationInfo?
+
+    /// Story 35: after a new router, the home network has a new address and no longer counts as
+    /// chosen. If the network disk is mounted (so the Mac can reach it) on a network that isn't
+    /// chosen, asks once per network, with a Mac notification, whether to allow backups on it.
+    /// Before any network is chosen, checklist check 6 asks instead.
+    private func askToChooseThisNetworkIfNeeded() {
+        guard !networks.allNetworks, !networks.chosen.isEmpty,
+              case let .router(address, _)? = currentNetwork, networks.network(routerAddress: address) == nil,
+              case let .configured(disk)? = destination, disk.kind == .network, disk.mountPoint != nil,
+              setupState.networksAskedAbout?.contains(address) != true
+        else { return }
+        setupState.networksAskedAbout = (setupState.networksAskedAbout ?? []) + [address]
+        system.saveSetupState(setupState)
+        system.log("Asked whether to allow backups on a network that isn't chosen")
+        system.showNotification(Alert(
+            kind: .chooseNetwork,
+            title: "Back up on this network?",
+            body: "Your backup disk can be reached on this network, but it isn't one you chose, so backups are waiting. If it's your network with a new router, choose \u{201C}Allow backups on this network\u{201D} in the BackMeUp menu."
+        ))
     }
 
     /// Back Up Now: starts a backup straight away, whatever the schedule says. Does nothing while
@@ -425,7 +451,7 @@ public final class Scheduler {
         system.log("Alert sent: \(alert.title)")
         system.showNotification(alert)
         let tag = switch alert.kind {
-        case .failed, .overdue: NtfyTag.warning
+        case .failed, .overdue, .chooseNetwork: NtfyTag.warning
         case .workingAgain: NtfyTag.success
         }
         ntfySender.send(title: alert.title, body: alert.body, tag: tag, with: ntfy)
