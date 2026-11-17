@@ -6,22 +6,38 @@ import BackMeUpCore
 /// Script changes to the outside world with `at(minutes:_:)`, then call `advance(minutes:)`.
 /// The clock moves one `Scheduler.tickInterval` at a time. At each step, scripted changes that are
 /// due are applied to the fake, then the scheduler ticks, as the app's timer would make it.
+/// A backup the scheduler starts runs to the end before the next step; the fake moves the clock
+/// on by the backup's scripted duration.
+///
+/// Dates in the menu are formatted in UTC, so "today" is the UTC day of `system.now`.
 @MainActor
 final class SchedulerHarness {
     static let startDate = Date(timeIntervalSince1970: 1_767_225_600) // 2026-01-01 00:00 UTC
 
     let system: FakeSystem
-    let scheduler: Scheduler
+    private(set) var scheduler: Scheduler
     let startDate: Date
     private var scripted: [(at: Date, change: (FakeSystem) -> Void)] = []
 
     init(startingAt start: Date = startDate) {
         startDate = start
         system = FakeSystem(now: start)
-        scheduler = Scheduler(system: system)
+        scheduler = Self.makeScheduler(system)
+    }
+
+    private static func makeScheduler(_ system: FakeSystem) -> Scheduler {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        return Scheduler(system: system, calendar: calendar)
     }
 
     var statusLine: String { scheduler.statusLine }
+    var nextBackupLine: String { scheduler.nextBackupLine }
+
+    /// Minutes since the start date, for readable expectations.
+    func minutes(_ minutes: Double) -> Date {
+        startDate.addingTimeInterval(minutes * 60)
+    }
 
     /// Schedules a change to the outside world, in minutes after the start date.
     func at(minutes: Double, _ change: @escaping (FakeSystem) -> Void) {
@@ -31,7 +47,13 @@ final class SchedulerHarness {
     /// Launches the app: applies changes due at the start, then ticks once.
     func start() async {
         applyDueChanges()
-        await scheduler.tick()
+        await tick()
+    }
+
+    /// Quits and relaunches the app: a new Scheduler over the same outside world and storage.
+    func restart() async {
+        scheduler = Self.makeScheduler(system)
+        await start()
     }
 
     /// Moves simulated time forward, ticking the scheduler at each step.
@@ -40,8 +62,26 @@ final class SchedulerHarness {
         while system.now < end {
             system.now = min(system.now.addingTimeInterval(Scheduler.tickInterval), end)
             applyDueChanges()
-            await scheduler.tick()
+            await tick()
         }
+    }
+
+    /// Chooses Back Up Now in the menu, and waits for the backup to finish.
+    func backUpNow() async {
+        scheduler.backUpNow()
+        await scheduler.waitForBackup()
+    }
+
+    /// Changes settings, as the Settings window does.
+    func changeSettings(_ change: (inout BackupSettings) -> Void) {
+        var settings = scheduler.settings
+        change(&settings)
+        scheduler.updateSettings(settings)
+    }
+
+    private func tick() async {
+        await scheduler.tick()
+        await scheduler.waitForBackup()
     }
 
     private func applyDueChanges() {

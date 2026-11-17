@@ -2,65 +2,52 @@ import Foundation
 import Testing
 import BackMeUpCore
 
-/// What the menu's status line says about Time Machine.
+/// What the menu's two lines say: the last backup, and the next one.
 @MainActor
 @Suite("Menu status line")
 struct StatusLineTests {
-    nonisolated static let networkDisk = DestinationInfo.configured(Destination(kind: .network, id: "network-id"))
-    nonisolated static let localDisk = DestinationInfo.configured(Destination(kind: .local, id: "local-id"))
+    static let networkDisk = DestinationInfo.configured(Destination(kind: .network, id: "network-id"))
 
-    @Test func idleWithNetworkDisk() async {
+    @Test func beforeAnyBackupHasRun() {
         let harness = SchedulerHarness()
-        harness.system.timeMachineStatus = .idle
-        harness.system.destinationInfo = Self.networkDisk
 
-        await harness.start()
-
-        #expect(harness.statusLine == "Time Machine idle · network disk")
+        #expect(harness.statusLine == "No backups yet")
+        #expect(harness.nextBackupLine == "Next backup: now")
     }
 
-    @Test(arguments: [
-        (TimeMachineStatus.running, networkDisk, "Backing up now · network disk"),
-        (.running, localDisk, "Backing up now · local disk"),
-        (.idle, localDisk, "Time Machine idle · local disk"),
-        (.idle, .notSetUp, "No Time Machine disk set up"),
-        (.unknown, networkDisk, "Can't tell what Time Machine is doing · network disk"),
-        (.idle, .unknown, "Can't read Time Machine's settings"),
-    ])
-    func describesTimeMachine(status: TimeMachineStatus, destination: DestinationInfo, expected: String) async {
-        let harness = SchedulerHarness()
-        harness.system.timeMachineStatus = status
-        harness.system.destinationInfo = destination
-
-        await harness.start()
-
-        #expect(harness.statusLine == expected)
-    }
-
-    @Test func followsABackupThatStartsAndFinishesAsTimePasses() async {
+    @Test func refreshingTheMenuNeverStartsABackup() async {
         let harness = SchedulerHarness()
         harness.system.destinationInfo = Self.networkDisk
-        harness.at(minutes: 10) { $0.timeMachineStatus = .running }
-        harness.at(minutes: 70) { $0.timeMachineStatus = .idle }
+        harness.system.timeMachineStatus = .running
 
-        await harness.start()
-        #expect(harness.statusLine == "Time Machine idle · network disk")
+        await harness.scheduler.refreshStatus()
 
-        await harness.advance(minutes: 30)
-        #expect(harness.statusLine == "Backing up now · network disk")
-
-        await harness.advance(minutes: 60)
-        #expect(harness.statusLine == "Time Machine idle · network disk")
+        #expect(harness.system.startedBackups.isEmpty)
+        #expect(harness.statusLine == "Backing up now")
     }
 
-    @Test func noticesWhenTheDiskIsRemoved() async {
+    @Test func showsTimeMachineBackingUpByItself() async {
         let harness = SchedulerHarness()
-        harness.system.destinationInfo = Self.localDisk
-        harness.at(minutes: 5) { $0.destinationInfo = .notSetUp }
+        harness.system.destinationInfo = Self.networkDisk
+        harness.system.timeMachineStatus = .running
 
         await harness.start()
-        await harness.advance(minutes: 5)
 
-        #expect(harness.statusLine == "No Time Machine disk set up")
+        #expect(harness.statusLine == "Backing up now")
+        #expect(harness.nextBackupLine == "")
+    }
+
+    @Test func olderBackupsShowTheirDate() async {
+        let harness = SchedulerHarness()
+        harness.system.destinationInfo = Self.networkDisk
+        await harness.start() // finished 1 Jan 00:20
+        harness.changeSettings { $0.backupInterval = BackupInterval(count: 1, unit: .weeks) }
+
+        await harness.advance(minutes: 24 * 60)
+        #expect(harness.statusLine == "Last backup: yesterday 00:20")
+
+        await harness.advance(minutes: 24 * 60)
+        #expect(harness.statusLine == "Last backup: 1 Jan 00:20")
+        #expect(harness.nextBackupLine == "Next backup: 8 Jan 00:20")
     }
 }

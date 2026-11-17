@@ -10,10 +10,14 @@ public struct Destination: Equatable, Sendable {
     /// Time Machine's ID for the destination. Matches `DestinationID` in `tmutil status -X`
     /// and the destination entries in Time Machine's preferences.
     public var id: String?
+    /// Where the disk is mounted, if it is. Network disks are usually not mounted between backups;
+    /// Time Machine mounts them itself.
+    public var mountPoint: String?
 
-    public init(kind: Kind, id: String?) {
+    public init(kind: Kind, id: String?, mountPoint: String? = nil) {
         self.kind = kind
         self.id = id
+        self.mountPoint = mountPoint
     }
 }
 
@@ -48,7 +52,7 @@ extension DestinationInfo {
             self = .unknown
             return
         }
-        self = .configured(Destination(kind: kind, id: first.string("ID")))
+        self = .configured(Destination(kind: kind, id: first.string("ID"), mountPoint: first.string("MountPoint")))
     }
 }
 

@@ -6,15 +6,15 @@ Everything builds with the Command Line Tools alone (`xcode-select --install`). 
 
 - **Test:** `scripts/test.sh`. Extra arguments go to `swift test`, for example `scripts/test.sh --filter StatusLine`.
 - **Build the app:** `scripts/build-app.sh`. It makes `build/BackMeUp.app`: a universal (arm64 and x86_64) release build for macOS 14+, ad-hoc signed, with no hardened runtime.
-- **Check the live Time Machine reading:** `build/BackMeUp.app/Contents/MacOS/BackMeUp --print-status` prints the menu's status line once and exits.
-- **Run it:** `open build/BackMeUp.app`. It's menu bar-only (`LSUIElement`), so look for the icon in the menu bar, not the Dock.
+- **Check the live Time Machine reading:** `build/BackMeUp.app/Contents/MacOS/BackMeUp --print-status` prints the menu's two status lines and whether Time Machine's preferences could be read, then exits. It never starts a backup.
+- **Run it:** `open build/BackMeUp.app`. It's menu bar-only (`LSUIElement`), so look for the icon in the menu bar, not the Dock. **Running the app starts real Time Machine backups** (`tmutil startbackup`) whenever one is due, and straight away on first launch, so don't run it on a Mac where that isn't wanted.
 
 ## Layout
 
 | Path | What's there |
 |---|---|
 | `Sources/BackMeUpCore` | Everything testable: the System port (`System.swift`), the real adapter (`RealSystem.swift`), output parsers and the `Scheduler` |
-| `Sources/BackMeUp` | The menu bar app. Thin: it ticks the scheduler on a timer and draws what it says |
+| `Sources/BackMeUp` | The menu bar app. Thin: it ticks the scheduler on a timer and draws what it says. The Settings window is plain AppKit |
 | `Tests/BackMeUpCoreTests` | Swift Testing tests |
 | `Tests/BackMeUpCoreTests/Support` | `FakeSystem` and `SchedulerHarness`, the main test point |
 | `Tests/BackMeUpCoreTests/Fixtures` | Saved command output for parser tests. Its README says where each file came from |
@@ -24,6 +24,7 @@ Everything builds with the Command Line Tools alone (`xcode-select --install`). 
 
 - Use **Swift Testing** (`import Testing`, `@Test`, `#expect`). XCTest isn't available with the Command Line Tools.
 - Test at two seams only, as the spec says. Behaviour goes through `SchedulerHarness`: script the outside world on its `FakeSystem`, with `harness.at(minutes:)` for changes later on, then `start()` and `advance(minutes:)`, and check what a user would see. Parsers get table tests against saved output in `Fixtures`.
+- Backups: `FakeSystem.nextBackup` scripts how the next `startBackup` turns out (exit code, `RESULT`, duration). The fake moves its clock on by the duration, as the real command blocks. `system.startedBackups` lists when each one began. `harness.backUpNow()`, `harness.restart()` (same storage, new scheduler) and `harness.changeSettings { }` act as the user would.
 - The scheduler and the System port are `@MainActor`, so mark suites that use the harness `@MainActor`. Values used in `@Test(arguments:)` must then be `nonisolated static`.
 - Saved output must contain nothing personal. Replace volume names, IDs, URLs, hostnames, hardware addresses and Wi-Fi names before committing (see `AGENTS.md`).
 
@@ -32,3 +33,4 @@ Everything builds with the Command Line Tools alone (`xcode-select --install`). 
 - Run tests with `scripts/test.sh`, not bare `swift test`. With the Command Line Tools, the compiler's in-process macro loader fails at random, about one build in four, with `plugin for module 'TestingMacros' not found` on every `@Test`, `@Suite` and `#expect`. The script loads the macros through the out-of-process `swift-plugin-server` instead. Bare `swift test` still works if you retry.
 - `swift build --build-system native` can't find the `Testing` module. Use the default build system.
 - `ld: warning: search path ... not found` lines during builds are harmless.
+- SwiftUI's `@State` (and other SwiftUI macros) can't be used: the Command Line Tools ship no `SwiftUIMacros` plugin. Build windows with AppKit.

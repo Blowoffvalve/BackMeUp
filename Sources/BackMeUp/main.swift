@@ -2,13 +2,18 @@ import AppKit
 import BackMeUpCore
 
 MainActor.assumeIsolated {
-    // `BackMeUp --print-status` prints the menu's status line once and exits. It's a smoke test
-    // of the real System adapter that needs no clicking.
+    // `BackMeUp --print-status` prints the menu's status lines once and exits. It's a smoke test
+    // of the real System adapter that needs no clicking. It never starts a backup.
     if CommandLine.arguments.contains("--print-status") {
-        let scheduler = Scheduler(system: RealSystem())
+        let system = RealSystem()
+        let scheduler = Scheduler(system: system)
         Task {
-            await scheduler.tick()
+            await scheduler.refreshStatus()
             print(scheduler.statusLine)
+            print(scheduler.nextBackupLine)
+            // Also checks that Time Machine's preferences can be read and parsed.
+            let preferences = await system.readPreferences()
+            print(preferences == nil ? "Can't read Time Machine's preferences" : "Read Time Machine's preferences")
             exit(0)
         }
         RunLoop.main.run()

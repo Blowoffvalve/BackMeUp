@@ -10,7 +10,7 @@ struct DestinationParserTests {
 
     @Test func localDisk() throws {
         let info = DestinationInfo(destinationInfoOutput: try fixture("destinationinfo-local.plist"))
-        #expect(info == .configured(Destination(kind: .local, id: "00000000-0000-0000-0000-000000000002")))
+        #expect(info == .configured(Destination(kind: .local, id: "00000000-0000-0000-0000-000000000002", mountPoint: "/Volumes/Backup Disk")))
     }
 
     @Test(arguments: ["destinationinfo-none.plist", "destinationinfo-none.txt"])

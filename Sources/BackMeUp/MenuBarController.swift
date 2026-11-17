@@ -10,6 +10,9 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private let scheduler: Scheduler
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     private let statusLineItem = NSMenuItem(title: "Checking Time Machine…", action: nil, keyEquivalent: "")
+    private let nextBackupItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+    private let backUpNowItem = NSMenuItem(title: "Back Up Now", action: #selector(backUpNow), keyEquivalent: "")
+    private lazy var settingsWindow = SettingsWindowController(scheduler: scheduler)
     private var backgroundTimer: Timer?
     private var openMenuTimer: Timer?
     private var isTicking = false
@@ -26,22 +29,31 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         let menu = NSMenu()
         menu.autoenablesItems = false
         statusLineItem.isEnabled = false
+        nextBackupItem.isEnabled = false
+        backUpNowItem.target = self
+        let settingsItem = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
+        settingsItem.target = self
         menu.addItem(statusLineItem)
+        menu.addItem(nextBackupItem)
+        menu.addItem(.separator())
+        menu.addItem(backUpNowItem)
+        menu.addItem(settingsItem)
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit BackMeUp", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         menu.delegate = self
         statusItem.menu = menu
 
-        backgroundTimer = makeTimer(every: Scheduler.tickInterval)
-        refresh()
+        scheduler.onChange = { [weak self] in self?.draw() }
+        backgroundTimer = makeTimer(every: Scheduler.tickInterval) { [weak self] in self?.tick() }
+        tick()
     }
 
     // MARK: NSMenuDelegate
 
     nonisolated func menuWillOpen(_ menu: NSMenu) {
         MainActor.assumeIsolated {
-            refresh()
-            openMenuTimer = makeTimer(every: Self.openMenuRefreshInterval)
+            refreshStatus()
+            openMenuTimer = makeTimer(every: Self.openMenuRefreshInterval) { [weak self] in self?.refreshStatus() }
         }
     }
 
@@ -52,24 +64,50 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         }
     }
 
+    // MARK: Actions
+
+    @objc private func backUpNow() {
+        scheduler.backUpNow()
+    }
+
+    @objc private func openSettings() {
+        settingsWindow.show()
+    }
+
     // MARK: Refreshing
 
     /// A timer that also fires while the menu is open (event-tracking run loop mode).
-    private func makeTimer(every interval: TimeInterval) -> Timer {
-        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.refresh() }
+    private func makeTimer(every interval: TimeInterval, _ action: @escaping @MainActor () -> Void) -> Timer {
+        let timer = Timer(timeInterval: interval, repeats: true) { _ in
+            MainActor.assumeIsolated { action() }
         }
         RunLoop.main.add(timer, forMode: .common)
         return timer
     }
 
-    private func refresh() {
+    /// Lets the scheduler start a backup if one is due.
+    private func tick() {
+        run { await $0.tick() }
+    }
+
+    /// Only re-reads Time Machine's state for the open menu.
+    private func refreshStatus() {
+        run { await $0.refreshStatus() }
+    }
+
+    private func run(_ work: @escaping @MainActor (Scheduler) async -> Void) {
         guard !isTicking else { return }
         isTicking = true
         Task {
-            await scheduler.tick()
-            statusLineItem.title = scheduler.statusLine
+            await work(scheduler)
             isTicking = false
         }
+    }
+
+    private func draw() {
+        statusLineItem.title = scheduler.statusLine
+        nextBackupItem.title = scheduler.nextBackupLine
+        nextBackupItem.isHidden = scheduler.nextBackupLine.isEmpty
+        backUpNowItem.isEnabled = !scheduler.isBackingUp
     }
 }

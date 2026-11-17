@@ -1,6 +1,6 @@
 import Foundation
 
-/// The System port's adapter for the real Mac. It only reads, so far.
+/// The System port's adapter for the real Mac.
 ///
 /// Time Machine's state comes from `/usr/bin/tmutil` run as a subprocess, because its
 /// preferences can't be read directly without Full Disk Access.
@@ -25,6 +25,39 @@ public final class RealSystem: System {
         // non-zero exit, so the parser sees the output whatever the exit code.
         let output = result.stdout.isEmpty ? result.stderr : result.stdout
         return DestinationInfo(destinationInfoOutput: output)
+    }
+
+    public func readPreferences() async -> TimeMachinePreferences? {
+        // `defaults` can read this file without Full Disk Access; reading the plist directly can't.
+        guard let result = await Command.run("/usr/bin/defaults", ["read", "/Library/Preferences/com.apple.TimeMachine"]),
+              result.exitCode == 0
+        else { return nil }
+        return TimeMachinePreferences(defaultsOutput: result.stdout)
+    }
+
+    public func startBackup() async -> Int32? {
+        await Command.run("/usr/bin/tmutil", ["startbackup", "--auto", "--block"])?.exitCode
+    }
+
+    // MARK: Settings storage
+
+    private enum Key {
+        static let history = "backupHistory"
+        static let settings = "backupSettings"
+    }
+
+    public func loadHistory() -> BackupHistory? { load(Key.history) }
+    public func saveHistory(_ history: BackupHistory) { save(history, Key.history) }
+    public func loadSettings() -> BackupSettings? { load(Key.settings) }
+    public func saveSettings(_ settings: BackupSettings) { save(settings, Key.settings) }
+
+    private func load<Value: Decodable>(_ key: String) -> Value? {
+        UserDefaults.standard.data(forKey: key).flatMap { try? JSONDecoder().decode(Value.self, from: $0) }
+    }
+
+    private func save<Value: Encodable>(_ value: Value, _ key: String) {
+        guard let data = try? JSONEncoder().encode(value) else { return }
+        UserDefaults.standard.set(data, forKey: key)
     }
 }
 
