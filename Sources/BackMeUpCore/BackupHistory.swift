@@ -6,11 +6,23 @@ public enum SkipReason: String, Codable, Equatable, Sendable {
     case noDiskSetUp
     /// The backup disk is a local disk that isn't mounted.
     case diskNotConnected
+    /// The backup disk is a network disk and the Mac isn't on a chosen network (or on none, or
+    /// only on a VPN).
+    case notOnChosenNetwork
+    /// The backup disk is a network disk and the router's hardware address couldn't be read.
+    case networkUnidentified
+
+    /// Whether this skip ends as soon as the Mac is on a chosen network.
+    public var isNetworkReason: Bool {
+        self == .notOnChosenNetwork || self == .networkUnidentified
+    }
 
     public var description: String {
         switch self {
         case .noDiskSetUp: "no Time Machine disk set up"
         case .diskNotConnected: "backup disk not connected"
+        case .notOnChosenNetwork: "not on a chosen network"
+        case .networkUnidentified: "couldn't identify this network"
         }
     }
 }

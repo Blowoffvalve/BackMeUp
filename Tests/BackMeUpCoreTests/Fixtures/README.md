@@ -16,3 +16,20 @@ In `defaults-timemachine-*.txt`, other UUIDs become `00000000-0000-0000-0000-000
 | `destinationinfo-none.plist` | `tmutil destinationinfo -X` | **Reconstructed**: an empty `Destinations` array |
 | `destinationinfo-none.txt` | `tmutil destinationinfo` | **Reconstructed**: the sentence `tmutil` prints when no disk is set up. Which of the two "none" forms `-X` really gives hasn't been checked |
 | `defaults-timemachine-network.txt` | `defaults read /Library/Preferences/com.apple.TimeMachine` | Real, macOS 27.2, one encrypted SMB network destination, automatic backups off, `RESULT` 0. Old-style plist text, not XML |
+
+## Network tables
+
+`netstat-*.txt` and `arp-*.txt` keep the shape of real macOS 27.2 output, but every value is replaced: the router is `192.0.2.1` (a documentation address), other local hosts are `192.0.2.N`, VPN addresses are `100.64.0.N`, and hardware addresses are `2:0:0:0:0:N` style (written without leading zeros, as `arp` and `netstat` print them).
+
+| File | Command | Source |
+|---|---|---|
+| `netstat-wifi-and-vpn.txt` | `netstat -rn -f inet` | Real, shortened: a Wi-Fi default route on `en0` with a Tailscale `utun` default route after it |
+| `netstat-wifi.txt` | `netstat -rn -f inet` | The same capture with the VPN lines removed |
+| `netstat-vpn-first.txt` | `netstat -rn -f inet` | **Reconstructed**: a VPN default route listed before an Ethernet one on `en7` |
+| `netstat-vpn-only.txt` | `netstat -rn -f inet` | **Reconstructed**: only `utun` and `ipsec` default routes |
+| `arp-gateway.txt` | `arp -an` | Real, shortened: the router's entry on `en0`, plus an `(incomplete)` entry |
+| `arp-gateway-incomplete.txt` | `arp -an` | **Reconstructed** from it: the router's entry is `(incomplete)` |
+| `arp-gateway-missing.txt` | `arp -an` | **Reconstructed** from it: no entry for the router |
+| `arp-wifi-and-ethernet.txt` | `arp -an` | **Reconstructed**: the router's IP on both `en0` and `en7`, with different addresses, to check the route's interface is used |
+
+The SystemConfiguration dictionaries in `NetworkParserTests.swift` copy the keys of a real `State:/Network/Service/<id>/IPv4` entry with the values replaced the same way.

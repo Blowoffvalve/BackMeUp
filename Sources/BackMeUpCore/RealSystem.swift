@@ -1,4 +1,6 @@
+import CoreWLAN
 import Foundation
+import SystemConfiguration
 
 /// The System port's adapter for the real Mac.
 ///
@@ -39,12 +41,52 @@ public final class RealSystem: System {
         await Command.run("/usr/bin/tmutil", ["startbackup", "--auto", "--block"])?.exitCode
     }
 
+    // MARK: Network identity
+
+    public func readNetwork() async -> NetworkReading {
+        // Everything here only reads state macOS already has; nothing is sent on the network.
+        guard let routes = await Command.run("/usr/sbin/netstat", ["-rn", "-f", "inet"]), routes.exitCode == 0,
+              let route = RoutingTable(netstatOutput: routes.stdout).physicalDefaultRoute
+        else { return .none }
+        // macOS 15+ hides hardware addresses in the ARP table from apps without Local Network
+        // permission (seen on macOS 27.2: `arp -an` run by an app prints nothing), so
+        // SystemConfiguration comes first and the ARP table is the fallback.
+        if let address = NetworkServiceState.routerHardwareAddress(services: Self.networkServices(), route: route) {
+            return .router(address: address, wifiName: wifiName(on: route.interface))
+        }
+        guard let arp = await Command.run("/usr/sbin/arp", ["-an"]), arp.exitCode == 0,
+              let address = ARPTable(arpOutput: arp.stdout).hardwareAddress(of: route.gateway, on: route.interface)
+        else { return .routerAddressUnknown }
+        return .router(address: address, wifiName: wifiName(on: route.interface))
+    }
+
+    /// Every `State:/Network/Service/<id>/IPv4` dictionary in SystemConfiguration's dynamic store.
+    private static func networkServices() -> [[String: Any]] {
+        guard let store = SCDynamicStoreCreate(nil, "BackMeUp" as CFString, nil, nil),
+              let keys = SCDynamicStoreCopyKeyList(store, "State:/Network/Service/.*/IPv4" as CFString) as? [String]
+        else { return [] }
+        return keys.compactMap { SCDynamicStoreCopyValue(store, $0 as CFString) as? [String: Any] }
+    }
+
+    /// The Wi-Fi name, if the default route goes over Wi-Fi. CoreWLAN returns nil without
+    /// Location permission; it's only ever used as a label.
+    private func wifiName(on interface: String) -> String? {
+        guard let wifi = CWWiFiClient.shared().interface(), wifi.interfaceName == interface,
+              let name = wifi.ssid(), !name.isEmpty
+        else { return nil }
+        return name
+    }
+
     // MARK: Settings storage
 
     private enum Key {
         static let history = "backupHistory"
         static let settings = "backupSettings"
+        static let networks = "chosenNetworks"
     }
+
+    public func loadNetworks() -> NetworkSettings? { load(Key.networks) }
+    public func saveNetworks(_ networks: NetworkSettings) { save(networks, Key.networks) }
 
     public func loadHistory() -> BackupHistory? { load(Key.history) }
     public func saveHistory(_ history: BackupHistory) { save(history, Key.history) }

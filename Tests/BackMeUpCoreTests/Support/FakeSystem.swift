@@ -33,6 +33,16 @@ final class FakeSystem: System {
     var storedHistory: BackupHistory?
     var storedSettings: BackupSettings?
 
+    /// The chosen network the fake starts on, "Home", and its router's hardware address.
+    nonisolated static let homeRouter = "02:00:00:00:00:01"
+    nonisolated static let home = NetworkReading.router(address: homeRouter, wifiName: "Home")
+
+    /// The network the Mac is on. Starts on Home, which `storedNetworks` has as chosen.
+    var network = FakeSystem.home
+    var storedNetworks: NetworkSettings? = NetworkSettings(
+        chosen: [ChosenNetwork(routerAddress: FakeSystem.homeRouter, label: "Home")]
+    )
+
     /// The simulated time each `tmutil startbackup` began.
     private(set) var startedBackups: [Date] = []
 
@@ -63,6 +73,13 @@ final class FakeSystem: System {
         if backup.preferencesUnreadableAfterwards { preferences = nil }
         return exitCode
     }
+
+    func readNetwork() async -> NetworkReading {
+        network
+    }
+
+    func loadNetworks() -> NetworkSettings? { storedNetworks }
+    func saveNetworks(_ networks: NetworkSettings) { storedNetworks = networks }
 
     func loadHistory() -> BackupHistory? { storedHistory }
     func saveHistory(_ history: BackupHistory) { storedHistory = history }

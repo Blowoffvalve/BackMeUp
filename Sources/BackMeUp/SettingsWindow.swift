@@ -14,6 +14,7 @@ final class SettingsWindowController: NSObject {
     private let unitPopUp = NSPopUpButton()
     private let retryField = NSTextField()
     private let retryStepper = NSStepper()
+    private lazy var networkSection = NetworkSettingsSection(scheduler: scheduler)
 
     private static let units: [(BackupInterval.Unit, String)] = [(.hours, "hours"), (.days, "days"), (.weeks, "weeks")]
 
@@ -46,6 +47,8 @@ final class SettingsWindowController: NSObject {
             retryRow,
             note("At least \(BackupSettings.minimumRetryMinutes) minutes."),
         ])
+        stack.addArrangedSubview(networkSection.view)
+        stack.setCustomSpacing(20, after: stack.arrangedSubviews[stack.arrangedSubviews.count - 2])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 8
@@ -102,6 +105,7 @@ final class SettingsWindowController: NSObject {
         unitPopUp.selectItem(at: Self.units.firstIndex { $0.0 == settings.backupInterval.unit } ?? 1)
         retryField.integerValue = settings.retryMinutes
         retryStepper.integerValue = settings.retryMinutes
+        networkSection.reload()
     }
 
     @objc private func stepperChanged(_ sender: NSStepper) {

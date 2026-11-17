@@ -26,6 +26,10 @@
 	<string>14.0</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>NSLocationUsageDescription</key>
+	<string>BackMeUp reads your Wi-Fi network's name to label the networks you allow backups on. It never uses your location.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>BackMeUp reads your Wi-Fi network's name to label the networks you allow backups on. It never uses your location.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>MIT licence</string>
 </dict>

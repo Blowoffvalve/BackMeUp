@@ -79,6 +79,13 @@ final class SchedulerHarness {
         scheduler.updateSettings(settings)
     }
 
+    /// Changes chosen networks or the "all networks" switch, as the Settings window does.
+    func changeNetworks(_ change: (inout NetworkSettings) -> Void) {
+        var networks = scheduler.networks
+        change(&networks)
+        scheduler.updateNetworks(networks)
+    }
+
     private func tick() async {
         await scheduler.tick()
         await scheduler.waitForBackup()
