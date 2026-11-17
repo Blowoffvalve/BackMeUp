@@ -62,6 +62,20 @@ public protocol System {
     func loadSetupState() -> SetupState?
     func saveSetupState(_ state: SetupState)
 
+    /// Sends a message through ntfy as an HTTP POST, and calls `completion` on the main actor
+    /// when it has been sent or has failed. Never waits for the network itself.
+    func sendNtfy(_ message: NtfyMessage, completion: @escaping @MainActor (NtfySendResult) -> Void)
+
+    /// Writes a line to BackMeUp's log. Never pass it a secret.
+    func log(_ message: String)
+
+    /// Secret storage: the Keychain. nil deletes the value.
+    func loadSecret(_ secret: Secret) -> String?
+    func saveSecret(_ value: String?, as secret: Secret)
+    /// The ntfy server address, kept with the other settings (it isn't secret).
+    func loadNtfyServer() -> String?
+    func saveNtfyServer(_ server: String)
+
     /// Settings storage. Values survive app restarts.
     func loadHistory() -> BackupHistory?
     func saveHistory(_ history: BackupHistory)

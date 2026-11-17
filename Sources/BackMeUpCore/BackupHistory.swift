@@ -109,6 +109,9 @@ public struct BackupHistory: Codable, Equatable, Sendable {
     public var lastAlertSent: Date?
     /// When BackMeUp first ran. Before the first success, backups are overdue counted from here.
     public var monitoringSince: Date?
+    /// Whether the one-time "First backup finished" ntfy message is still to be sent: set at the
+    /// first success when ntfy is set up, cleared once the message is sent.
+    public var firstBackupMessagePending: Bool?
 
     public init(lastSuccess: Date? = nil, attempts: [BackupAttempt] = []) {
         self.lastSuccess = lastSuccess
