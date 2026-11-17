@@ -58,6 +58,10 @@ public protocol System {
     /// Opens a System Settings screen. Returns false if it couldn't be opened.
     func openSystemSettings(_ pane: SystemSettingsPane) -> Bool
 
+    /// The running app's build version (`CFBundleVersion`), or nil outside an app bundle. A
+    /// different version from the last launch means Sparkle has installed an update.
+    var appVersion: String? { get }
+
     /// What BackMeUp remembers about setting itself up.
     func loadSetupState() -> SetupState?
     func saveSetupState(_ state: SetupState)

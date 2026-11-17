@@ -87,12 +87,14 @@ public final class Scheduler {
         timeMachineStatus = await system.readTimeMachineStatus()
         currentNetwork = await system.readNetwork()
         await readProgress()
-        if !setupState.firstRunDone {
+        let isUpdated = isFirstLaunchAfterUpdate
+        if !setupState.firstRunDone || isUpdated {
             registerLoginItem()
         }
         await readChecklist()
-        if !setupState.firstRunDone {
+        if !setupState.firstRunDone || isUpdated {
             setupState.firstRunDone = true
+            setupState.lastLaunchedVersion = system.appVersion
             system.saveSetupState(setupState)
         }
         updateSleepPrevention()
@@ -120,6 +122,13 @@ public final class Scheduler {
     private var previousProblems: Set<ChecklistItem.Check>?
     /// Checks whose Settings link failed to open, so they show plain-text directions instead.
     private var linkFailed: Set<ChecklistItem.Check> = []
+
+    /// Whether this is the first tick since Sparkle installed a new version. After an update,
+    /// BackMeUp adds itself to Login Items again and re-reads the checklist.
+    private var isFirstLaunchAfterUpdate: Bool {
+        guard setupState.firstRunDone, let version = system.appVersion else { return false }
+        return setupState.lastLaunchedVersion != version
+    }
 
     /// While no backup has succeeded yet: advice for the long first backup.
     public var checklistTip: String? {
@@ -172,6 +181,8 @@ public final class Scheduler {
             !problems.subtracting(previousProblems).isEmpty
         } else {
             !setupState.firstRunDone || problems.contains { $0.isRequired }
+                // After an update, say so if BackMeUp no longer opens at login.
+                || (isFirstLaunchAfterUpdate && problems.contains(.opensAtLogin))
         }
         previousProblems = problems
         if shouldShow { onShowChecklist?() }

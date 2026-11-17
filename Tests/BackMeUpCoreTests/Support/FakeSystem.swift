@@ -143,6 +143,8 @@ final class FakeSystem: System {
     var settingsLinksOpen = true
     private(set) var openedSettings: [SystemSettingsPane] = []
     var storedSetupState: SetupState?
+    /// The running app's version. Change it before `SchedulerHarness.restart()` to simulate an update.
+    var appVersion: String? = "1.0"
 
     func readLoginItemStatus() -> LoginItemStatus { loginItemStatus }
 

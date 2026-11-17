@@ -29,8 +29,12 @@ public enum SystemSettingsPane: Equatable, Sendable {
 public struct SetupState: Codable, Equatable, Sendable {
     /// Whether the first run (adding the login item and showing the checklist) has happened.
     public var firstRunDone: Bool
+    /// The app version (`CFBundleVersion`) that last launched, to spot the first launch after an
+    /// update. nil if it was never recorded, for example by a version from before updates existed.
+    public var lastLaunchedVersion: String?
 
-    public init(firstRunDone: Bool = false) {
+    public init(firstRunDone: Bool = false, lastLaunchedVersion: String? = nil) {
         self.firstRunDone = firstRunDone
+        self.lastLaunchedVersion = lastLaunchedVersion
     }
 }

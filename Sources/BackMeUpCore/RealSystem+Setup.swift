@@ -19,6 +19,12 @@ extension RealSystem {
         return readLoginItemStatus()
     }
 
+    // MARK: Version
+
+    public var appVersion: String? {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+    }
+
     // MARK: Notifications
 
     public func readNotificationPermission() async -> NotificationPermission {
