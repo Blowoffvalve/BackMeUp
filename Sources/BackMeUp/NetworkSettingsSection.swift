@@ -66,14 +66,16 @@ final class NetworkSettingsSection: NSObject {
         allNetworksCheckbox.action = #selector(allNetworksChanged)
         allowButton.target = self
         allowButton.action = #selector(allowCurrentNetwork)
-        currentNetworkNote.preferredMaxLayoutWidth = 200
+        allowRow.orientation = .vertical
+        allowRow.alignment = .leading
+        allowRow.spacing = 4
         list.orientation = .vertical
         list.alignment = .leading
         list.spacing = 4
 
         let title = NSTextField(labelWithString: "Networks for backups to a network disk")
         title.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
-        let hint = NSTextField.note("Connect to your home network, then click Allow Backups on This Network. It's in the menu too. A USB disk backs up on any network.")
+        let hint = NSTextField.note("Connect to each network you want backups on, such as your home Wi-Fi, and click Allow Backups on This Network. A USB disk backs up on any network.")
 
         view.orientation = .vertical
         view.alignment = .leading
@@ -107,18 +109,21 @@ final class NetworkSettingsSection: NSObject {
         }
     }
 
-    /// The button is there only while backups are limited to chosen networks, and works only when
-    /// the network the Mac is on can be identified and isn't chosen yet. The note says why not.
+    /// The button is there only while backups are limited to chosen networks and the network the
+    /// Mac is on isn't chosen yet. It works only when that network can be identified; the note
+    /// below it says why not, or that the network is already chosen.
     private func drawAllowRow() {
         allowRow.isHidden = scheduler.networks.allNetworks
         allowButton.isEnabled = scheduler.canAllowCurrentNetwork
+        allowButton.isHidden = false
         let note: String
         switch scheduler.currentNetwork {
         case nil:
             note = "Checking the network you're on\u{2026}"
         case let .router(address, _)?:
             if let chosen = scheduler.networks.network(routerAddress: address) {
-                note = "You're on \u{201C}\(chosen.label)\u{201D}, which is already chosen."
+                allowButton.isHidden = true
+                note = "\u{2713} You're on \u{201C}\(chosen.label)\u{201D}, so backups can run here."
             } else {
                 note = ""
             }
