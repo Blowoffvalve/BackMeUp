@@ -61,7 +61,7 @@ In your Applications folder, hold down the Control key and click **BackMeUp**. C
 
 ### Look for the icon
 
-BackMeUp has no window in the Dock. Look for a small clock icon in the menu bar at the top right of your screen. Click it to open the BackMeUp menu.
+BackMeUp has no window in the Dock. Look for a small house icon in the menu bar at the top right of your screen. Click it to open the BackMeUp menu.
 
 ## The setup checklist
 
@@ -92,7 +92,7 @@ While a backup runs on power, BackMeUp keeps your Mac awake. Closing the lid sti
 
 ## The menu
 
-Click the clock icon in the menu bar. From top to bottom, the menu shows:
+Click the house icon in the menu bar. From top to bottom, the menu shows:
 
 - **How your backups are doing.** For example "Last backup: today 14:02", "Backing up: 35%, about 3 hours left", "Last backup failed: …", "Waiting for a chosen network" or "Finish setting up: see the checklist".
 - **When the next backup is.** For example "Next backup: tomorrow 14:02", "Next try: today 15:30" after a problem, or "Resumes: …" for a paused first backup.
@@ -106,7 +106,7 @@ Click the clock icon in the menu bar. From top to bottom, the menu shows:
 - **Uninstall…**
 - **Quit BackMeUp**
 
-When something's wrong, the clock icon gets an exclamation mark.
+When something's wrong, the arrow in the house icon turns into an exclamation mark.
 
 ## Settings
 

@@ -178,14 +178,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         drawIcon()
     }
 
-    /// A clock normally; a clock with an exclamation mark while backups have a problem.
+    /// BackMeUp's house mark normally; with an exclamation mark while backups have a problem.
     private func drawIcon() {
-        let problem = scheduler.hasProblem
-        let image = NSImage(
-            systemSymbolName: problem ? "clock.badge.exclamationmark" : "clock.arrow.circlepath",
-            accessibilityDescription: problem ? "BackMeUp: backups need attention" : "BackMeUp"
-        )
-        image?.isTemplate = true
-        statusItem.button?.image = image
+        statusItem.button?.image = Logo.menuBarImage(problem: scheduler.hasProblem)
     }
 }

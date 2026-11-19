@@ -8,6 +8,8 @@
 	<string>BackMeUp</string>
 	<key>CFBundleExecutable</key>
 	<string>BackMeUp</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>io.github.blowoffvalve.BackMeUp</string>
 	<key>CFBundleInfoDictionaryVersion</key>
@@ -35,7 +37,7 @@
 	<key>SUFeedURL</key>
 	<string>https://github.com/Blowoffvalve/BackMeUp/releases/latest/download/appcast.xml</string>
 	<key>SUPublicEDKey</key>
-	<string>REPLACE_WITH_SPARKLE_PUBLIC_ED_KEY</string>
+	<string>JICKKcSkEBYFxOm2vQ1cuLP0PIvOm048wwBO405M4BU=</string>
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
 	<key>SUScheduledCheckInterval</key>

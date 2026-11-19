@@ -31,6 +31,13 @@ if [ $# -ge 1 ]; then
 fi
 plutil -lint -s "$app/Contents/Info.plist"
 
+# The app icon, drawn from the same code as the menu bar icon (Sources/BackMeUp/Logo.swift).
+icon_tmp=$(mktemp -d)
+trap 'rm -rf "$icon_tmp"' EXIT
+swiftc -O -o "$icon_tmp/make-icon" Sources/BackMeUp/Logo.swift scripts/make-icon/main.swift
+"$icon_tmp/make-icon" "$icon_tmp/AppIcon.iconset"
+iconutil -c icns -o "$app/Contents/Resources/AppIcon.icns" "$icon_tmp/AppIcon.iconset"
+
 # Ad-hoc signature ("-"), no hardened runtime: the spec needs library validation off so the
 # ad-hoc signed app can load the Sparkle framework. Sparkle ships with the runtime on, so its
 # parts are re-signed the same way, inside out, before the app itself.

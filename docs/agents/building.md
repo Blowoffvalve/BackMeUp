@@ -20,7 +20,7 @@ Everything builds with the Command Line Tools alone (`xcode-select --install`). 
 | `Tests/BackMeUpCoreTests/Support` | `FakeSystem` and `SchedulerHarness`, the main test point |
 | `Tests/BackMeUpCoreTests/Fixtures` | Saved command output for parser tests. Its README says where each file came from |
 | `Packaging/Info.plist` | The bundle's Info.plist, copied in by `build-app.sh`. Its version is a placeholder; releases set it. It also holds Sparkle's settings: the feed URL, a daily check and `SUPublicEDKey`, a placeholder until the maintainer adds the real key |
-| `scripts/` | `test.sh`, `build-app.sh`, `release.sh`, `test-release.sh` and `verify-update-signature.swift` (checks an update's EdDSA signature with CryptoKit) |
+| `scripts/` | `test.sh`, `build-app.sh`, `release.sh`, `test-release.sh`, `verify-update-signature.swift` (checks an update's EdDSA signature with CryptoKit) and `make-icon/` (draws the app icon from `Sources/BackMeUp/Logo.swift`, which also draws the menu bar icon; `build-app.sh` runs it) |
 
 ## Writing tests
 
