@@ -21,24 +21,34 @@ To use the key on another Mac, save the backup to a file there and import it wit
 From a clean checkout of the commit you want to release:
 
 ```sh
-scripts/release.sh 1.2.0
+scripts/release.sh
 ```
 
-The version is one to three numbers separated by dots. The script:
+It asks what kind of release this is and works out the version from the last one, the highest `vX.Y.Z` tag on your Mac or on GitHub:
+
+| Choice | When | 1.2.0 becomes |
+|---|---|---|
+| 1) Patch | bug fixes only | 1.2.1 |
+| 2) Minor | new features or settings; everything that worked still works | 1.3.0 |
+| 3) Major | big changes: something removed, or people must set it up again | 2.0.0 |
+
+With no tags yet, it counts from 0.0.0, so the first minor release is 0.1.0. You can skip the question with `scripts/release.sh patch`, `minor` or `major`, or give an exact version of three numbers, such as `scripts/release.sh 1.2.0`, which must be higher than the last release. `scripts/release.sh --dry-run` shows the version it would use and stops.
+
+The examples below use 1.2.0. The script:
 
 1. stops straight away if `SUPublicEDKey` is still the placeholder
 2. builds a universal (arm64 and x86_64) release of `BackMeUp.app`, with Sparkle inside
-3. sets both version fields in its `Info.plist` (`CFBundleShortVersionString` and `CFBundleVersion`) to the version you gave
+3. sets both version fields in its `Info.plist` (`CFBundleShortVersionString` and `CFBundleVersion`) to the new version
 4. ad-hoc signs it, with no hardened runtime, and checks the signature with `codesign --verify`
 5. zips it to `build/release/BackMeUp-1.2.0.zip`
 6. signs the zip with your private key, using Sparkle's `generate_appcast`, and writes `build/release/appcast.xml`. macOS may ask whether `generate_appcast` can use the key in your Keychain. The appcast offers only this version, downloaded from the `v1.2.0` release on GitHub
 7. checks the signature against `SUPublicEDKey`, and stops without an appcast if the private key doesn't match it
 
-It never uploads, pushes or tags anything. Each version must be higher than the last, because updates compare `CFBundleVersion`.
+It never uploads, pushes or tags anything, and prints the commands for step 2 when it's done. Each version must be higher than the last, because updates compare `CFBundleVersion`. The tag from step 2 is what records the release, so tag every release you publish, or the next run will offer the same version again.
 
-To sign with a key file instead of the Keychain, set `SPARKLE_ED_KEY_FILE`: `SPARKLE_ED_KEY_FILE=path/to/key scripts/release.sh 1.2.0`.
+To sign with a key file instead of the Keychain, set `SPARKLE_ED_KEY_FILE`: `SPARKLE_ED_KEY_FILE=path/to/key scripts/release.sh`.
 
-To check the script itself, run `scripts/test-release.sh`. It does two release builds of a test version with a throwaway key, so it takes a few minutes. It doesn't touch your Keychain or `Packaging/Info.plist`.
+To check the script itself, run `scripts/test-release.sh`. It checks the version choices first, in a scratch repository with made-up tags, then does two release builds of a test version with a throwaway key, so it takes a few minutes. It doesn't touch your Keychain or `Packaging/Info.plist`.
 
 ## 2. Upload it
 

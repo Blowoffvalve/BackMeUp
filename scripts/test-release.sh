@@ -14,14 +14,36 @@ pass() { echo "ok: $*"; }
 
 # --- Rejects a missing or malformed version, and makes no zip ---
 touch "$tmp/marker"
-for bad in "" "v1.0" "1.0-beta" "1..2" "1.2.3.4" "abc"; do
-    out=$(scripts/release.sh $bad 2>&1)
+# An empty argument means "ask", and with no answer (stdin is /dev/null) it must stop too.
+for bad in "" "v1.0" "1.0-beta" "1..2" "1.2" "1.2.3.4" "abc"; do
+    out=$(scripts/release.sh $bad 2>&1 </dev/null)
     if [ $? -eq 0 ]; then fail "accepted version '$bad'"; else pass "rejects version '$bad'"; fi
     case "$out" in *Usage*) ;; *) fail "no usage message for '$bad': $out" ;; esac
 done
 if [ -d build/release ] && [ -n "$(find build/release -name '*.zip' -newer "$tmp/marker")" ]; then
     fail "a rejected run made a zip"
 fi
+
+# --- Works out the next version from the vX.Y.Z tags (fast: --dry-run stops before building) ---
+mkdir -p "$tmp/vrepo/scripts"
+cp scripts/release.sh "$tmp/vrepo/scripts/"
+(cd "$tmp/vrepo" && git init -q && git -c user.name=t -c user.email=t@example.com commit -q --allow-empty -m t)
+next() { (cd "$tmp/vrepo" && scripts/release.sh --dry-run "$@" 2>&1); }
+expect() { # expect WHAT VERSION OUTPUT
+    case "$3" in *"Releasing $2"*) pass "$1 gives $2" ;; *) fail "$1 should give $2: $3" ;; esac
+}
+expect "minor with no tags" 0.1.0 "$(next minor </dev/null)"
+expect "answering 3 with no tags" 1.0.0 "$(echo 3 | next)"
+for tag in v0.9.0 v1.4.2 v1.10.0 v2.0-beta other; do git -C "$tmp/vrepo" tag "$tag"; done
+expect "patch after v1.10.0" 1.10.1 "$(next patch </dev/null)"
+expect "minor after v1.10.0" 1.11.0 "$(next minor </dev/null)"
+expect "major after v1.10.0" 2.0.0 "$(next major </dev/null)"
+expect "answering 2 after v1.10.0" 1.11.0 "$(echo 2 | next)"
+expect "an explicit higher version" 1.10.1 "$(next 1.10.1 </dev/null)"
+for not_higher in 1.10.0 1.9.9; do
+    if next "$not_higher" </dev/null >/dev/null; then fail "accepted $not_higher after v1.10.0"; else pass "refuses $not_higher after v1.10.0"; fi
+done
+if echo x | next >/dev/null; then fail "accepted the answer x"; else pass "refuses the answer x"; fi
 
 # --- Refuses to sign while Packaging/Info.plist has the placeholder update key ---
 version=9.8.7
