@@ -60,8 +60,8 @@ struct FirstBackupTests {
     nonisolated static let errors: [(FakeSystem.ScriptedBackup, String)] = [
         (.fails(exitCode: 0, result: 19), "Last backup failed: Time Machine reported error 19"),
         (.fails(exitCode: 1, result: 19), "Last backup failed: Time Machine reported error 19"),
-        (.fails(exitCode: 0, result: 26, minutes: 1), "Last backup failed: the backup disk couldn't be reached"),
-        (.fails(exitCode: 1, result: 26), "Last backup failed: the backup disk couldn't be reached"),
+        (.fails(exitCode: 0, result: 26, minutes: 1), "Last backup failed: the backup disk couldn't be reached. Check you're on the right network. If it keeps happening, restarting your Mac usually fixes it."),
+        (.fails(exitCode: 1, result: 26), "Last backup failed: the backup disk couldn't be reached. Check you're on the right network. If it keeps happening, restarting your Mac usually fixes it."),
         (.fails(exitCode: nil), "Last backup failed: couldn't start Time Machine"),
     ]
 

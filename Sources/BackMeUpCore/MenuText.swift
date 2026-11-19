@@ -21,7 +21,7 @@ struct MenuText {
         if isWaitingForSetup { return "Finish setting up: see the checklist" }
         switch history.attempts.last?.outcome {
         case let .failed(reason)?:
-            return "Last backup failed: \(reason.description)"
+            return "Last backup failed: \(reason.statusText)"
         case .skipped(.notOnChosenNetwork)?:
             return "Waiting for a chosen network"
         case let .skipped(reason)?:

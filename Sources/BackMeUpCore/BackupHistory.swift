@@ -72,6 +72,19 @@ public enum FailureReason: Codable, Equatable, Sendable {
     /// no newer backup appeared on the disk. It may be left over from an earlier one.
     case notConfirmed
 
+    /// What to try when a network disk couldn't be reached. Shown in alerts and the status line.
+    static let networkDiskHint =
+        "Check you're on the right network. If it keeps happening, restarting your Mac usually fixes it."
+
+    /// How the menu's status line explains this failure: the description, plus the hint for an
+    /// unreachable network disk.
+    var statusText: String {
+        switch self {
+        case .diskUnreachable(isNetworkDisk: true): "\(description). \(Self.networkDiskHint)"
+        default: description
+        }
+    }
+
     public var description: String {
         switch self {
         case .couldNotStart: "couldn't start Time Machine"

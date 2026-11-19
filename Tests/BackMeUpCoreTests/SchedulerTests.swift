@@ -93,7 +93,7 @@ struct SchedulerTests {
     nonisolated static let failures: [(FakeSystem.ScriptedBackup, String)] = [
         (.fails(exitCode: 0, result: 19), "Last backup failed: Time Machine reported error 19"),
         // tmutil exits 0 within seconds, having copied nothing.
-        (.fails(exitCode: 0, result: 26, minutes: 1), "Last backup failed: the backup disk couldn't be reached"),
+        (.fails(exitCode: 0, result: 26, minutes: 1), "Last backup failed: the backup disk couldn't be reached. Check you're on the right network. If it keeps happening, restarting your Mac usually fixes it."),
         (.fails(exitCode: 0, result: nil), "Last backup failed: couldn't read Time Machine's result"),
         (.fails(exitCode: 1, result: 0), "Last backup failed: Time Machine stopped with code 1"),
         (.fails(exitCode: nil), "Last backup failed: couldn't start Time Machine"),
@@ -111,6 +111,16 @@ struct SchedulerTests {
 
         #expect(harness.statusLine == expected)
         #expect(harness.scheduler.history.lastSuccess == harness.minutes(20))
+    }
+
+    @Test func anUnreachableLocalDiskHasNoNetworkHint() async {
+        let harness = await harnessAfterFirstBackup()
+        harness.system.destinationInfo = Self.pluggedInLocalDisk
+        harness.system.nextBackup = .fails(exitCode: 0, result: 26, minutes: 1)
+
+        await harness.backUpNow()
+
+        #expect(harness.statusLine == "Last backup failed: the backup disk couldn't be reached")
     }
 
     @Test func unreadablePreferencesAfterABackupAreAFailure() async {
