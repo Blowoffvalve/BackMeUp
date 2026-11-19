@@ -31,7 +31,7 @@ The `Scheduler` is the core. Everything outside the app goes through the **Syste
 2. the battery rule: on battery with battery backups off. Back Up Now ignores it
 3. the disk: no disk set up, or a local disk that isn't mounted
 4. the network rule, for network disks and for a disk whose kind can't be read, never for a local disk
-5. then `tmutil startbackup --auto --block`, judged by the success rule
+5. then `tmutil startbackup --auto --block`, judged by the success rule. If Time Machine's `RESULT` is 18 (it couldn't reach the network disk, for example just after login while a VPN is still starting) and there's no new snapshot, the attempt is a skip ("network backup disk not reachable"), not a failure
 
 Skips never count as failures. Each attempt is recorded in `BackupHistory` with its outcome: succeeded, failed (with a reason), skipped (with a reason) or paused. History keeps the last 200 attempts, plus a running tally since the last success (`SinceLastSuccess`) so alert counts stay right however many attempts are dropped.
 

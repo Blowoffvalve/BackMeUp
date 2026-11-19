@@ -132,6 +132,31 @@ struct SchedulerTests {
         #expect(harness.statusLine == "Last backup failed: couldn't read Time Machine's result")
     }
 
+    // Time Machine's RESULT 18 (BACKUP_FAILED_TARGETVOL_NOT_FOUND): the network disk couldn't be
+    // reached, for example just after login while a VPN is still starting. Seen on macOS 27.2.
+    @Test func anUnreachableNetworkDiskIsASkipNotAFailure() async {
+        let harness = await harnessAfterFirstBackup()
+        harness.system.nextBackup = .fails(result: 18, minutes: 0)
+
+        await harness.backUpNow()
+
+        #expect(harness.statusLine == "Backup skipped: network backup disk not reachable")
+        #expect(harness.notifications.isEmpty)
+        #expect(harness.system.logLines.last == "Backup skipped: network backup disk not reachable")
+    }
+
+    @Test func anUnreachableNetworkDiskIsTriedAgainAfterTheRetryInterval() async {
+        let harness = harnessWithNetworkDisk()
+        harness.system.nextBackup = .fails(result: 18, minutes: 0)
+        harness.at(minutes: 1) { $0.nextBackup = .succeeds }
+
+        await harness.start()
+        await harness.advance(minutes: 60)
+
+        #expect(harness.system.startedBackups == [harness.minutes(0), harness.minutes(60)])
+        #expect(harness.statusLine == "Last backup: today 01:20")
+    }
+
     @Test func aFailureIsRetriedAfterTheRetryInterval() async {
         let harness = harnessWithNetworkDisk()
         harness.system.nextBackup = .fails(result: 19) // finishes at 00:20

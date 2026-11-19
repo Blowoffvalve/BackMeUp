@@ -11,6 +11,9 @@ public enum SkipReason: String, Codable, Equatable, Sendable {
     case notOnChosenNetwork
     /// The backup disk is a network disk and the router's hardware address couldn't be read.
     case networkUnidentified
+    /// The backup disk is a network disk that Time Machine couldn't reach (its `RESULT` 18), for
+    /// example just after login while a VPN is still starting.
+    case diskNotReachable
     /// The Mac is on battery and backups on battery are turned off.
     case onBattery
     /// A required checklist item (automatic backups off, a chosen network for a network disk, or
@@ -33,6 +36,7 @@ public enum SkipReason: String, Codable, Equatable, Sendable {
         case .diskNotConnected: "backup disk not connected"
         case .notOnChosenNetwork: "not on a chosen network"
         case .networkUnidentified: "couldn't identify this network"
+        case .diskNotReachable: "network backup disk not reachable"
         case .onBattery: "on battery"
         case .setupNotFinished: "setup isn't finished"
         }
@@ -47,6 +51,7 @@ public enum SkipReason: String, Codable, Equatable, Sendable {
         case .diskNotConnected: "The backup disk hasn't been connected since \(since)."
         case .notOnChosenNetwork: "Your Mac hasn't been on a chosen network since \(since)."
         case .networkUnidentified: "BackMeUp hasn't been able to identify your Mac's network since \(since)."
+        case .diskNotReachable: "Time Machine hasn't been able to reach the network backup disk since \(since)."
         case .onBattery: "Your Mac has been on battery each time a backup was due since \(since)."
         case .setupNotFinished: "BackMeUp's setup checklist hasn't been finished. Open it from the menu."
         }

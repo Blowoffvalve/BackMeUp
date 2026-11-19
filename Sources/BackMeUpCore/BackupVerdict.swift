@@ -40,6 +40,8 @@ struct BackupVerdict {
     /// this backup finished.
     private var completedOutcome: BackupAttempt.Outcome {
         guard let exitCode else { return .failed(.couldNotStart) }
+        // The network disk couldn't be reached: nothing was tried, so it's a skip, retried as usual.
+        if after?.result == Self.diskNotReachableResult, !hasNewSnapshot { return .skipped(.diskNotReachable) }
         guard exitCode == 0 else { return .failed(.exitCode(exitCode)) }
         switch after?.result {
         case nil: return .failed(.resultUnreadable)
@@ -56,6 +58,10 @@ struct BackupVerdict {
         default: .result(result)
         }
     }
+
+    /// Time Machine's `BACKUP_FAILED_TARGETVOL_NOT_FOUND`, seen on macOS 27.2 with
+    /// `EHOSTUNREACH` when the network disk's server couldn't be reached.
+    static let diskNotReachableResult = 18
 
     /// Whether the disk's newest backup is newer than it was before this one started.
     private var hasNewSnapshot: Bool {

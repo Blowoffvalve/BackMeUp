@@ -130,9 +130,9 @@ BackMeUp sends a Mac notification when:
 
 Each alert says why. For example: "No backup for 3 days. Your Mac hasn't been on a chosen network since Friday."
 
-If Time Machine couldn't reach the backup disk, the alert and the menu say "The backup disk couldn't be reached." For a network disk they add: "Check you're on the right network. If it keeps happening, restarting your Mac usually fixes it." Time Machine can lose track of a network disk that's still there, and a restart clears that. Other Time Machine errors are shown by their number.
+If Time Machine lost track of the backup disk (its error 26), the alert and the menu say "The backup disk couldn't be reached." For a network disk they add: "Check you're on the right network. If it keeps happening, restarting your Mac usually fixes it." Time Machine can lose track of a network disk that's still there, and a restart clears that. Other Time Machine errors are shown by their number.
 
-Backups that are skipped never count as failures. A backup is skipped when your Mac is on a network you haven't chosen, on battery with battery backups turned off, or when the USB disk isn't plugged in. Skipped backups still count towards days without a backup.
+Backups that are skipped never count as failures. A backup is skipped when your Mac is on a network you haven't chosen, on battery with battery backups turned off, when the USB disk isn't plugged in, or when the network disk's server can't be reached at all (Time Machine's error 18, for example just after you log in, while a VPN such as Tailscale is still connecting). Skipped backups still count towards days without a backup.
 
 While a problem lasts, BackMeUp reminds you at most once a day.
 
