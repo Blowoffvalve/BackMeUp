@@ -76,7 +76,7 @@ Backups start once checks 1, 2 and 6 are done. The others help backups keep runn
 | 3 | Whether your backup disk is encrypted. This is only a warning. It never stops backups. | "Your backup disk is encrypted." |
 | 4 | BackMeUp should open when you log in, so backups keep running after a restart. It adds itself. If macOS asks you to approve it, the button opens Login Items. | "BackMeUp opens at login." |
 | 5 | Notifications let BackMeUp tell you when backups stop. Click **Allow Notifications**. | "Notifications are allowed." |
-| 6 | For a disk on your network: choose the networks backups may run on. While you're at home, open the BackMeUp menu and choose **Allow backups on this network**. A USB disk doesn't need this. | "At least one network is chosen for backups." |
+| 6 | For a disk on your network: choose the networks backups may run on. While you're at home, open the BackMeUp menu and choose **Allow backups on this network**, or click **Allow Backups on This Network** in Settings. A USB disk doesn't need this. | "At least one network is chosen for backups." |
 
 Each check has a mark next to it: ✓ done, ✗ not done, ! a warning, ? BackMeUp can't tell, and – doesn't apply to your Mac.
 
@@ -136,7 +136,7 @@ Backups that are skipped never count as failures. A backup is skipped when your 
 
 While a problem lasts, BackMeUp reminds you at most once a day.
 
-If your network disk can be reached on a network you haven't chosen, for example after you get a new router, BackMeUp asks once: "Back up on this network?" Choose **Allow backups on this network** in the menu if it's yours.
+If your network disk can be reached on a network you haven't chosen, for example after you get a new router, BackMeUp asks once: "Back up on this network?" If it's yours, choose **Allow backups on this network** in the menu, or click **Allow Backups on This Network** in Settings.
 
 ### Alerts on your phone (optional)
 

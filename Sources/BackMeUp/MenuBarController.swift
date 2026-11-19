@@ -19,7 +19,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         action: #selector(allowCurrentNetwork),
         keyEquivalent: ""
     )
-    private let locationPermission = LocationPermission()
     private lazy var settingsWindow = SettingsWindowController(scheduler: scheduler, updater: updater)
     private lazy var checklistWindow = ChecklistWindowController(scheduler: scheduler) { [weak self] in
         self?.openSettings()
@@ -99,19 +98,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         scheduler.backUpNow()
     }
 
-    /// Labels the network with its Wi-Fi name when Location permission allows it, and otherwise
-    /// asks the user to name it.
     @objc private func allowCurrentNetwork() {
-        Task {
-            await locationPermission.requestIfNeeded()
-            await scheduler.refreshStatus()
-            guard scheduler.canAllowCurrentNetwork else { return }
-            if let wifiName = scheduler.currentNetworkWiFiName {
-                scheduler.allowCurrentNetwork(label: wifiName)
-            } else if let name = NetworkNamePrompt.ask() {
-                scheduler.allowCurrentNetwork(label: name)
-            }
-        }
+        Task { await AllowNetworkFlow.run(scheduler: scheduler) }
     }
 
     @objc private func openChecklist() {
@@ -175,6 +163,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         networkItem.isHidden = scheduler.networkLine.isEmpty
         allowNetworkItem.isHidden = !scheduler.canAllowCurrentNetwork
         if checklistWindow.isVisible { checklistWindow.reload() }
+        if settingsWindow.isVisible { settingsWindow.reloadNetworks() }
         drawIcon()
     }
 

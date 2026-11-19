@@ -38,6 +38,19 @@ final class SettingsWindowController: NSObject {
         load()
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
+        // The network may have changed since the last reading; redraw once it's read again.
+        Task {
+            await scheduler.refreshStatus()
+            networkSection.reload()
+        }
+    }
+
+    var isVisible: Bool { window?.isVisible ?? false }
+
+    /// Redraws the networks part, so it follows the network the Mac is on and networks added from
+    /// the menu while the window is open.
+    func reloadNetworks() {
+        networkSection.reload()
     }
 
     // MARK: Building the window
