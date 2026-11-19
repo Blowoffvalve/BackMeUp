@@ -24,6 +24,8 @@ struct BackupVerdict {
     var exitCode: Int32?
     /// The disk's entry in Time Machine's preferences once the command returned.
     var after: TimeMachinePreferences.DestinationEntry?
+    /// The kind of backup disk, or nil if BackMeUp couldn't tell.
+    var diskKind: Destination.Kind?
     /// Whether BackMeUp has recorded a success yet. Before the first, an interrupted backup is
     /// paused, not failed.
     var isFirstBackup: Bool
@@ -41,8 +43,17 @@ struct BackupVerdict {
         guard exitCode == 0 else { return .failed(.exitCode(exitCode)) }
         switch after?.result {
         case nil: return .failed(.resultUnreadable)
-        case let code? where code != 0: return .failed(.result(code))
+        case let code? where code != 0: return .failed(failure(result: code))
         default: return hasNewSnapshot ? .succeeded : .failed(.notConfirmed)
+        }
+    }
+
+    /// The failure an error `RESULT` stands for. Only codes whose meaning has been seen get a
+    /// reason of their own.
+    private func failure(result: Int) -> FailureReason {
+        switch result {
+        case 26: .diskUnreachable(isNetworkDisk: diskKind == .network)
+        default: .result(result)
         }
     }
 
@@ -58,7 +69,7 @@ struct BackupVerdict {
     private func firstBackupOutcome(_ outcome: BackupAttempt.Outcome) -> BackupAttempt.Outcome {
         switch outcome {
         case .failed(.exitCode):
-            if let result = after?.result, result != 0 { return .failed(.result(result)) }
+            if let result = after?.result, result != 0 { return .failed(failure(result: result)) }
             return .paused
         case .failed(.resultUnreadable), .failed(.notConfirmed):
             return .paused

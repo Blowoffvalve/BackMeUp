@@ -25,6 +25,32 @@ struct AlertTests {
         ])
     }
 
+    @Test func aNetworkDiskThatCouldNotBeReachedIsNamedInTheFailureAlert() async {
+        let harness = harnessWithNetworkDisk()
+        harness.system.nextBackup = .fails(result: 26)
+
+        await harness.start()
+
+        #expect(harness.notifications == [
+            Alert(
+                kind: .failed,
+                title: "Backup failed",
+                body: "1 backup didn't finish. The backup disk couldn't be reached. Check you're on the right network. "
+                    + "If it keeps happening, restarting your Mac usually fixes it."
+            ),
+        ])
+    }
+
+    @Test func aLocalDiskThatCouldNotBeReachedGetsNoNetworkHint() async {
+        let harness = SchedulerHarness()
+        harness.system.destinationInfo = Self.pluggedInLocalDisk
+        harness.system.nextBackup = .fails(result: 26)
+
+        await harness.start()
+
+        #expect(harness.notifications.map(\.body) == ["1 backup didn't finish. The backup disk couldn't be reached."])
+    }
+
     @Test func aLastingFailureIsAlertedAtMostOnceEvery24Hours() async {
         let harness = harnessWithNetworkDisk()
         harness.system.nextBackup = .fails(result: 19)
@@ -235,6 +261,23 @@ struct AlertTests {
         #expect(harness.notifications.map(\.kind) == [.overdue])
         #expect(harness.notifications.first?.title == "Backups failed")
         #expect(harness.notifications.first?.body == "No backup for 3 days. 54 backups didn't finish. Time Machine reported error 22.")
+    }
+
+    @Test func overdueAfterUnreachableDiskFailuresNamesTheDisk() async {
+        let harness = harnessWithNetworkDisk()
+        harness.changeSettings { $0.alerts.failuresInARow = 100 }
+        harness.system.nextBackup = .fails(result: 26, minutes: 1)
+
+        await harness.start()
+        await harness.advance(minutes: 3 * 24 * 60)
+
+        #expect(harness.notifications.map(\.kind) == [.overdue])
+        #expect(harness.notifications.first?.title == "Backups failed")
+        #expect(harness.notifications.first?.body.hasPrefix("No backup for 3 days.") == true)
+        #expect(harness.notifications.first?.body.hasSuffix(
+            "backups didn't finish. The backup disk couldn't be reached. Check you're on the right network. "
+                + "If it keeps happening, restarting your Mac usually fixes it."
+        ) == true)
     }
 
     @Test func aSuccessAfterAnOverdueAlertSaysBackupsAreWorkingAgain() async {

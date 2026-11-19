@@ -102,6 +102,10 @@ extension FailureReason {
         case .couldNotStart: "Time Machine couldn't be started."
         case let .exitCode(code): "Time Machine stopped with code \(code)."
         case let .result(code): "Time Machine reported error \(code)."
+        case .diskUnreachable(isNetworkDisk: false): "The backup disk couldn't be reached."
+        case .diskUnreachable(isNetworkDisk: true):
+            "The backup disk couldn't be reached. Check you're on the right network. "
+                + "If it keeps happening, restarting your Mac usually fixes it."
         case .resultUnreadable: "BackMeUp couldn't read Time Machine's result."
         case .notConfirmed: "BackMeUp couldn't tell whether Time Machine finished the backup."
         }

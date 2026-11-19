@@ -32,6 +32,18 @@ struct NtfyTests {
         ])
     }
 
+    @Test func anUnreachableDiskIsNamedInTheNtfyMessage() async {
+        let harness = harnessWithNtfy()
+        harness.system.nextBackup = .fails(result: 26)
+
+        await harness.start()
+
+        #expect(harness.system.ntfyMessages.map(\.body) == [
+            "1 backup didn't finish. The backup disk couldn't be reached. Check you're on the right network. "
+                + "If it keeps happening, restarting your Mac usually fixes it.",
+        ])
+    }
+
     @Test func withoutATopicNothingGoesToNtfy() async {
         let harness = SchedulerHarness()
         harness.system.destinationInfo = Self.networkDisk

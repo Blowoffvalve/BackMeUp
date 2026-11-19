@@ -61,6 +61,11 @@ public enum FailureReason: Codable, Equatable, Sendable {
     case exitCode(Int32)
     /// `tmutil` exited 0 but the destination's `RESULT` wasn't 0.
     case result(Int)
+    /// Time Machine couldn't reach the backup disk: `RESULT` 26, which Time Machine's log names
+    /// `BACKUP_FAILED_DISCONNECTED_NETWORK`. Seen for a network share that was reachable, when Time
+    /// Machine kept a stale record of its mount; restarting the Mac fixed it. `isNetworkDisk` is
+    /// false for a local disk or one BackMeUp couldn't identify.
+    case diskUnreachable(isNetworkDisk: Bool)
     /// `tmutil` exited 0 but the destination's `RESULT` couldn't be read.
     case resultUnreadable
     /// `tmutil` exited 0 and `RESULT` was 0, but nothing showed the result was from this backup:
@@ -72,6 +77,7 @@ public enum FailureReason: Codable, Equatable, Sendable {
         case .couldNotStart: "couldn't start Time Machine"
         case let .exitCode(code): "Time Machine stopped with code \(code)"
         case let .result(code): "Time Machine reported error \(code)"
+        case .diskUnreachable: "the backup disk couldn't be reached"
         case .resultUnreadable: "couldn't read Time Machine's result"
         case .notConfirmed: "couldn't tell whether Time Machine finished"
         }

@@ -63,6 +63,8 @@ A finished backup counts as a success only if all three hold (`BackupVerdict`):
 
 `tmutil` has been seen exiting 0 for a cancelled backup, and `RESULT` doesn't say which backup it belongs to, hence rule 3. Anything else is a failure with a reason: couldn't start, a non-zero exit code, a non-zero `RESULT`, an unreadable `RESULT`, or "couldn't tell whether Time Machine finished" (`RESULT` 0 but no new snapshot). If the preferences couldn't be read before the backup, it can't be confirmed either.
 
+A non-zero `RESULT` gets a reason of its own only when its meaning has been seen. So far that's `RESULT` 26, which Time Machine's log names `BACKUP_FAILED_DISCONNECTED_NETWORK`: "the backup disk couldn't be reached" (`FailureReason.diskUnreachable`). It was seen with `tmutil startbackup` exiting 0 after about a second, having copied nothing, for a network share Time Machine held a stale mount record for; restarting the Mac fixed it. For a network disk, alerts add a hint to check the network and restart the Mac. Every other code stays "Time Machine reported error N".
+
 ## First-backup handling
 
 Until the first success is recorded, a backup that stops without Time Machine reporting an error is **paused**, not failed: a non-zero exit code with no non-zero `RESULT`, an unreadable `RESULT`, or no new snapshot. A non-zero `RESULT`, or `tmutil` failing to run at all, is still a failure. Paused attempts never trigger the failure alert and retry at the retry interval. The menu says "First backup paused" and "Resumes: …".

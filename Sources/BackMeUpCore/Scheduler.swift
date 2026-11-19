@@ -374,6 +374,7 @@ public final class Scheduler {
         }
         let destination = await system.readDestinationInfo()
         let destinationID: String?
+        var diskKind: Destination.Kind?
         switch destination {
         case .notSetUp:
             return BackupAttempt(started: started, finished: started, outcome: .skipped(.noDiskSetUp))
@@ -381,6 +382,7 @@ public final class Scheduler {
             return BackupAttempt(started: started, finished: started, outcome: .skipped(.diskNotConnected))
         case let .configured(disk):
             destinationID = disk.id
+            diskKind = disk.kind
         case .unknown:
             // Can't tell which disk: let Time Machine try, and judge it by its result.
             destinationID = nil
@@ -407,6 +409,7 @@ public final class Scheduler {
             before: before,
             exitCode: exitCode,
             after: exitCode == nil ? nil : await system.readPreferences()?.destination(id: destinationID),
+            diskKind: diskKind,
             isFirstBackup: history.lastSuccess == nil
         )
         return BackupAttempt(started: started, finished: system.now, outcome: verdict.outcome)
