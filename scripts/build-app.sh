@@ -2,7 +2,8 @@
 # Builds build/BackMeUp.app: a release build, wrapped in an app bundle and ad-hoc signed.
 # Needs only the Command Line Tools, not Xcode.
 # Usage: scripts/build-app.sh [VERSION]. With a VERSION, both of the bundle's version fields are set
-# to it; without one, they keep the placeholder in Packaging/Info.plist. scripts/release.sh passes it.
+# to it; without one, the version shown in Settings says it's a development build and names the
+# commit. scripts/release.sh passes it.
 set -eu
 cd "$(dirname "$0")/.."
 
@@ -28,6 +29,11 @@ if [ $# -ge 1 ]; then
     # Sparkle compares CFBundleVersion between releases, so it gets the same dotted version.
     plutil -replace CFBundleShortVersionString -string "$1" "$app/Contents/Info.plist"
     plutil -replace CFBundleVersion -string "$1" "$app/Contents/Info.plist"
+else
+    # Not a release: say so, and which commit it was built from, where Settings shows the version.
+    commit=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)
+    if [ -n "$(git status --porcelain 2>/dev/null)" ]; then commit="$commit with uncommitted changes"; fi
+    plutil -replace CFBundleShortVersionString -string "development build ($commit)" "$app/Contents/Info.plist"
 fi
 plutil -lint -s "$app/Contents/Info.plist"
 

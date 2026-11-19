@@ -1,7 +1,7 @@
 import AppKit
 
 /// The Settings window's updates part: whether to install updates without asking, and
-/// "Check Now".
+/// "Check Now", and which version this is.
 @MainActor
 final class UpdateSettingsSection: NSObject {
     private let updater: AppUpdater
@@ -31,7 +31,11 @@ final class UpdateSettingsSection: NSObject {
         view.orientation = .vertical
         view.alignment = .leading
         view.spacing = 8
-        for subview in [title, NSStackView(views: [automaticCheckbox, checkNow]), note] {
+        // Release builds carry the release's version; scripts/build-app.sh labels others as development builds.
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
+        let versionLabel = NSTextField(labelWithString: "This is BackMeUp \(version).")
+        versionLabel.isSelectable = true
+        for subview in [title, versionLabel, NSStackView(views: [automaticCheckbox, checkNow]), note] {
             view.addArrangedSubview(subview)
         }
         reload()
