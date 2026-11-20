@@ -375,9 +375,12 @@ public final class Scheduler {
         await backupTask?.value
     }
 
-    /// Saves new settings, raised to the minimums.
+    /// Saves new settings, raised to the minimums. The chosen disk stays as it is: only
+    /// `chooseDestination(id:)` changes it.
     public func updateSettings(_ newSettings: BackupSettings) {
+        let destinationID = settings.destinationID
         settings = newSettings.validated
+        settings.destinationID = destinationID
         system.saveSettings(settings)
         describe()
     }

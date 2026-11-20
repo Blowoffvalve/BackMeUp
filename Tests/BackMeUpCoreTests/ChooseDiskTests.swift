@@ -108,6 +108,18 @@ struct ChooseDiskTests {
         #expect(harness.system.startedBackupDestinations == ["network-id"])
     }
 
+    @Test func savingTheOtherSettingsKeepsTheChoice() async {
+        let harness = harnessWithTwoDisks()
+        await harness.start()
+        await harness.scheduler.chooseDestination(id: "network-id")
+
+        // The Settings window saves its fields as new settings, without the disk.
+        harness.scheduler.updateSettings(BackupSettings(backupInterval: BackupInterval(count: 2, unit: .days), retryMinutes: 60))
+
+        #expect(harness.scheduler.settings.destinationID == "network-id")
+        #expect(harness.system.storedSettings?.destinationID == "network-id")
+    }
+
     @Test func settingsSavedBeforeDiskChoicesStillLoad() throws {
         let saved = #"{"backupInterval":{"count":2,"unit":"days"},"retryMinutes":30,"allowBackupsOnBattery":false}"#
         let settings = try JSONDecoder().decode(BackupSettings.self, from: Data(saved.utf8))
