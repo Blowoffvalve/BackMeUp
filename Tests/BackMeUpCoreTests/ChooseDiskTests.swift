@@ -68,6 +68,25 @@ struct ChooseDiskTests {
         #expect(harness.statusLine == "Last backup: today 00:21")
     }
 
+    @Test func aChoiceMadeWhileTheChecklistIsBeingReadIsKept() async {
+        let harness = harnessWithTwoDisks()
+        await harness.start()
+        let shownBefore = harness.checklistShown
+
+        // The open checklist's refresh is part-way through reading when the user chooses.
+        harness.system.pausesNextPreferencesRead = true
+        let refresh = Task { await harness.scheduler.refreshStatus() }
+        while !harness.system.isPreferencesReadPaused { await Task.yield() }
+        await harness.scheduler.chooseDisk(id: "network-id")
+        harness.system.resumePreferencesRead()
+        await refresh.value
+
+        let check = harness.scheduler.checklist?.item(.diskSetUp)
+        #expect(check?.state == .passed)
+        #expect(check?.chosenDiskID == "network-id")
+        #expect(harness.checklistShown == shownBefore)
+    }
+
     @Test func theChosenNetworkDiskFollowsTheNetworkRule() async {
         let harness = harnessWithTwoDisks()
         harness.system.network = .router(address: "02:00:00:00:00:09", wifiName: "Cafe")

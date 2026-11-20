@@ -102,7 +102,23 @@ final class FakeSystem: System {
     }
 
     func readPreferences() async -> TimeMachinePreferences? {
-        preferences
+        if pausesNextPreferencesRead {
+            pausesNextPreferencesRead = false
+            await withCheckedContinuation { pausedPreferencesRead = $0 }
+        }
+        return preferences
+    }
+
+    /// Whether the next read of Time Machine's preferences waits for `resumePreferencesRead()`,
+    /// so a test can act while a reading is in flight.
+    var pausesNextPreferencesRead = false
+    private var pausedPreferencesRead: CheckedContinuation<Void, Never>?
+    /// Whether a read of Time Machine's preferences is waiting for `resumePreferencesRead()`.
+    var isPreferencesReadPaused: Bool { pausedPreferencesRead != nil }
+
+    func resumePreferencesRead() {
+        pausedPreferencesRead?.resume()
+        pausedPreferencesRead = nil
     }
 
     /// Records the command, moves the clock on by the scripted duration (the real command blocks

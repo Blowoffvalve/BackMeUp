@@ -178,15 +178,19 @@ public final class Scheduler {
     /// something needs the user.
     private func readChecklist() async {
         let reading = await system.readDestinationInfo()
+        let preferences = await system.readPreferences()
+        let notifications = await system.readNotificationPermission()
+        // The saved choice is read only after every await, so a disk chosen while this reading
+        // was in flight is the one it uses.
         let choiceCleared = forgetChosenDiskIfGone(reading)
         destination = reading.choosing(settings.destinationID)
         let checklist = Checklist(ChecklistInputs(
             destination: reading,
             chosenDiskID: settings.destinationID,
-            preferences: await system.readPreferences(),
+            preferences: preferences,
             networks: networks,
             loginItem: system.readLoginItemStatus(),
-            notifications: await system.readNotificationPermission(),
+            notifications: notifications,
             linkFailed: linkFailed
         ))
         self.checklist = checklist
