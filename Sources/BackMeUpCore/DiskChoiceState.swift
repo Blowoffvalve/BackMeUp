@@ -23,6 +23,7 @@ struct DiskChoiceState: Equatable {
         chosenID = settings.destinationID
         chosenDiskRemoved = setupState.chosenDiskRemoved == true
         lastUsedDiskID = setupState.lastUsedDiskID
+        newDiskAdded = setupState.newDiskAdded == true
     }
 
     /// Writes the state into what's saved.
@@ -30,6 +31,7 @@ struct DiskChoiceState: Equatable {
         settings.destinationID = chosenID
         setupState.chosenDiskRemoved = chosenDiskRemoved ? true : nil
         setupState.lastUsedDiskID = lastUsedDiskID
+        setupState.newDiskAdded = newDiskAdded ? true : nil
     }
 
     /// The user chose a disk. From here on the choice decides, never the disk BackMeUp used before.

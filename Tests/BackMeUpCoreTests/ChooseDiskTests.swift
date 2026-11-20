@@ -384,6 +384,21 @@ struct ChooseDiskTests {
         #expect(harness.notifications.isEmpty)
     }
 
+    @Test func theNewDiskNoteSurvivesARestartUntilTheUserChooses() async {
+        let harness = await harnessBackingUpToOneDisk()
+        harness.system.destinationInfo = .several([Self.usbDisk, Self.networkDisk])
+        await harness.advance(minutes: 1)
+
+        await harness.restart()
+        #expect(harness.scheduler.checklist?.item(.diskSetUp)?.sentence
+            == "Time Machine has a new disk. BackMeUp still backs up to Old Disk.")
+
+        await harness.scheduler.chooseDisk(id: "network-id")
+        #expect(harness.scheduler.checklist?.item(.diskSetUp)?.sentence == "A Time Machine disk is set up.")
+        await harness.restart()
+        #expect(harness.scheduler.checklist?.item(.diskSetUp)?.sentence == "A Time Machine disk is set up.")
+    }
+
     @Test func removingADiskChosenAfterTheSwitchStillAsksRatherThanGoingBackToTheFirst() async {
         let harness = await harnessBackingUpToOneDisk()
         harness.system.destinationInfo = .several([Self.usbDisk, Self.networkDisk])
@@ -418,6 +433,8 @@ struct ChooseDiskTests {
         let state = try JSONDecoder().decode(SetupState.self, from: Data(saved.utf8))
         #expect(state.firstRunDone)
         #expect(state.lastUsedDiskID == nil)
+        #expect(state.chosenDiskRemoved == nil)
+        #expect(state.newDiskAdded == nil)
     }
 
     // MARK: The chosen disk disappears

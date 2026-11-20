@@ -42,6 +42,9 @@ public struct SetupState: Codable, Equatable, Sendable {
     /// Whether the chosen disk left Time Machine and the user hasn't chosen again. Backups wait,
     /// even with one disk left, and it survives restarts. nil in state saved before it existed.
     public var chosenDiskRemoved: Bool?
+    /// Whether a second disk was added and the disk BackMeUp was using was kept as the choice,
+    /// until the user chooses again. Check 1 says so. nil in state saved before it existed.
+    public var newDiskAdded: Bool?
 
     public init(firstRunDone: Bool = false, lastLaunchedVersion: String? = nil) {
         self.firstRunDone = firstRunDone
