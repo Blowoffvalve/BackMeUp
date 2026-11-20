@@ -59,7 +59,7 @@ final class SettingsWindowController: NSObject {
     /// Redraws the "Back up to" pop-up from the latest reading of Time Machine's disks.
     func reloadDisks() {
         let wasHidden = diskPopUp.view.isHidden
-        diskPopUp.reload(choices: scheduler.diskChoices, chosen: scheduler.settings.destinationID)
+        diskPopUp.reload(scheduler.checklist?.item(.diskSetUp))
         diskNote.isHidden = diskPopUp.view.isHidden
         // Fit the window as the pop-up appears or goes.
         if wasHidden != diskPopUp.view.isHidden, let window, let content = window.contentView {

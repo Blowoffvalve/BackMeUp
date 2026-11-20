@@ -21,26 +21,28 @@ final class DiskPopUp: NSObject {
         popUp.action = #selector(chosen(_:))
     }
 
-    /// Shows `choices`, with `chosen` selected, or a "Choose a disk" placeholder until one is.
-    func reload(choices: [DiskChoice], chosen: String?) {
+    /// Shows check 1's disk choices, with the chosen one selected, or a "Choose a disk…"
+    /// placeholder while the check needs a choice. Hidden without check 1 or without choices.
+    func reload(_ item: ChecklistItem?) {
+        let choices = item?.diskChoices ?? []
         view.isHidden = choices.isEmpty
-        if let drawn, drawn.choices == choices, drawn.chosen == chosen { return }
-        drawn = (choices, chosen)
+        guard let item else { return }
+        if let drawn, drawn.choices == choices, drawn.chosen == item.chosenDiskID { return }
+        drawn = (choices, item.chosenDiskID)
         popUp.removeAllItems()
-        let needsChoice = !choices.contains { $0.id == chosen }
-        if needsChoice {
+        if item.needsDiskChoice {
             let placeholder = NSMenuItem(title: "Choose a disk…", action: nil, keyEquivalent: "")
             placeholder.isEnabled = false
             popUp.menu?.addItem(placeholder)
         }
         // Added to the menu directly: `addItem(withTitle:)` would drop a second disk with the same label.
         for choice in choices {
-            let item = NSMenuItem(title: choice.label, action: nil, keyEquivalent: "")
-            item.representedObject = choice.id
-            popUp.menu?.addItem(item)
-            if choice.id == chosen { popUp.select(item) }
+            let menuItem = NSMenuItem(title: choice.label, action: nil, keyEquivalent: "")
+            menuItem.representedObject = choice.id
+            popUp.menu?.addItem(menuItem)
+            if choice.id == item.chosenDiskID { popUp.select(menuItem) }
         }
-        if needsChoice { popUp.selectItem(at: 0) }
+        if item.needsDiskChoice { popUp.selectItem(at: 0) }
     }
 
     @objc private func chosen(_ sender: NSPopUpButton) {

@@ -112,7 +112,7 @@ final class ChecklistWindowController: NSObject, NSWindowDelegate {
         var lines: [NSView] = [text(item.sentence)]
         if !item.diskChoices.isEmpty {
             // One pop-up kept across redraws, so the refresh doesn't reset it under the pointer.
-            diskPopUp.reload(choices: item.diskChoices, chosen: item.chosenDiskID)
+            diskPopUp.reload(item)
             lines.append(diskPopUp.view)
         }
         if item.showsDirections {

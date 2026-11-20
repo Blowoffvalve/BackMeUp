@@ -53,6 +53,12 @@ public struct ChecklistItem: Equatable, Sendable {
     /// The disk chosen in the pop-up, or nil until the user chooses.
     public var chosenDiskID: String?
 
+    /// Whether the pop-up shows a "Choose a disk…" placeholder: there are disks to choose from,
+    /// and the chosen one isn't among them.
+    public var needsDiskChoice: Bool {
+        !diskChoices.isEmpty && !diskChoices.contains { $0.id == chosenDiskID }
+    }
+
     /// Whether the check is done, or doesn't apply.
     public var isSatisfied: Bool { state == .passed || state == .notNeeded }
 

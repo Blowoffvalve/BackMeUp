@@ -39,6 +39,7 @@ struct ChooseDiskTests {
             DiskChoice(id: "network-id", label: "New Disk (Network disk, encrypted)"),
         ])
         #expect(check?.chosenDiskID == nil)
+        #expect(check?.needsDiskChoice == true)
         #expect(harness.system.startedBackups.isEmpty)
         #expect(harness.scheduler.skipReason == .setupNotFinished)
         #expect(harness.statusLine == "Finish setting up: see the checklist")
@@ -57,6 +58,7 @@ struct ChooseDiskTests {
         let checklist = harness.scheduler.checklist
         #expect(checklist?.item(.diskSetUp)?.state == .passed)
         #expect(checklist?.item(.diskSetUp)?.chosenDiskID == "network-id")
+        #expect(checklist?.item(.diskSetUp)?.needsDiskChoice == false)
         #expect(checklist?.item(.diskEncrypted)?.state == .passed)
         #expect(checklist?.item(.networkChosen)?.state == .passed)
         #expect(harness.checklistShown == shownBefore)
@@ -204,6 +206,7 @@ struct ChooseDiskTests {
         await harness.advance(minutes: 60)
         #expect(harness.scheduler.checklist?.item(.diskSetUp)?.sentence
             == "The disk you chose is no longer in Time Machine. Choose which disk BackMeUp backs up to.")
+        #expect(harness.scheduler.checklist?.item(.diskSetUp)?.needsDiskChoice == true)
 
         await harness.scheduler.chooseDisk(id: "other-id")
         #expect(harness.scheduler.checklist?.item(.diskSetUp)?.sentence == "A Time Machine disk is set up.")
@@ -246,6 +249,7 @@ struct ChooseDiskTests {
         #expect(check?.state == .passed)
         #expect(check?.sentence == "A Time Machine disk is set up.")
         #expect(check?.diskChoices == [])
+        #expect(check?.needsDiskChoice == false)
         #expect(harness.scheduler.diskChoices == [])
         #expect(harness.system.startedBackups == [harness.startDate])
         #expect(harness.system.startedBackupDestinations == [nil])
