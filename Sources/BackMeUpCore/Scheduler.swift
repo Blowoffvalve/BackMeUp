@@ -56,7 +56,7 @@ public final class Scheduler {
     /// With no disk chosen, or when Time Machine doesn't say which disk, any backup counts.
     private var isTimeMachineRunningToChosenDisk: Bool {
         guard case let .running(runningTo) = timeMachineStatus else { return false }
-        guard let chosen = settings.destinationID, let runningTo else { return true }
+        guard let chosen = diskChoice.chosenID, let runningTo else { return true }
         return runningTo == chosen
     }
     /// Whether Time Machine's backup command is running for BackMeUp right now.
@@ -196,14 +196,13 @@ public final class Scheduler {
         let notifications = await system.readNotificationPermission()
         // The saved choice is read only after every await, so a disk chosen while this reading
         // was in flight is the one it uses.
-        let choiceCleared = forgetChosenDiskIfGone(reading)
-        keepUsedDiskIfOneWasAdded(reading)
-        destination = reading.choosing(settings.destinationID)
+        let choiceCleared = followDiskChoice(reading)
+        destination = reading.choosing(diskChoice.chosenID)
         let checklist = Checklist(ChecklistInputs(
             destination: reading,
-            chosenDiskID: settings.destinationID,
-            chosenDiskRemoved: chosenDiskRemoved,
-            newDiskAdded: newDiskAdded,
+            chosenDiskID: diskChoice.chosenID,
+            chosenDiskRemoved: diskChoice.chosenDiskRemoved,
+            newDiskAdded: diskChoice.newDiskAdded,
             preferences: preferences,
             now: system.now,
             networks: networks,
@@ -235,75 +234,65 @@ public final class Scheduler {
     /// "Back up to": saves the disk BackMeUp backs up to, by its Time Machine ID, and re-reads
     /// the checklist straight away.
     public func chooseDisk(id: String?) async {
-        guard !isUninstalled, id != settings.destinationID else { return }
-        settings.destinationID = id
-        newDiskAdded = false
-        system.saveSettings(settings)
-        // From here on the choice decides, never the disk BackMeUp used before.
-        setupState.chosenDiskRemoved = nil
-        setupState.lastUsedDiskID = nil
-        system.saveSetupState(setupState)
+        guard !isUninstalled, changeDiskChoice({ $0.choose(id) }) else { return }
         system.log("Chose the backup disk")
         await readChecklist()
         describe()
     }
 
-    /// Whether the saved choice was cleared because that disk left Time Machine, until the user
-    /// chooses again. Check 1 says so and asks, even with one disk left. Saved, so a restart
-    /// doesn't start backing up to a disk the user didn't choose.
-    private var chosenDiskRemoved: Bool { setupState.chosenDiskRemoved == true }
+    /// Which disk BackMeUp backs up to, with the rules for changing it. Saved in the settings and
+    /// the setup state; `changeDiskChoice` keeps them in step.
+    private lazy var diskChoice = DiskChoiceState(settings: settings, setupState: setupState)
 
-    /// Clears the saved choice when that disk is no longer in Time Machine, and sends the "choose
-    /// a backup disk" alert once if there's a disk left to choose. Returns whether it did.
-    /// Backups wait until the user chooses again, however many disks are left.
-    private func forgetChosenDiskIfGone(_ reading: DestinationInfo) -> Bool {
-        // Can't tell: keep the choice.
-        guard let chosen = settings.destinationID, reading != .unknown else { return false }
-        let disks = reading.disks
-        guard !disks.contains(where: { $0.id == chosen }) else { return false }
-        settings.destinationID = nil
-        system.saveSettings(settings)
-        setupState.chosenDiskRemoved = true
-        // Never fall back to the disk BackMeUp used before the choice.
-        setupState.lastUsedDiskID = nil
-        system.saveSetupState(setupState)
-        system.log("The chosen backup disk is no longer in Time Machine\(disks.isEmpty ? "" : "; asking which disk to back up to")")
-        if !disks.isEmpty {
-            send(Alert(
-                kind: .chooseDisk,
-                title: "Choose a backup disk",
-                body: "The disk you chose is no longer in Time Machine, so backups are paused. Choose a disk in BackMeUp's checklist to start them again."
-            ))
+    /// Applies a change to the disk choice and saves whatever it changed.
+    private func changeDiskChoice<Result>(_ change: (inout DiskChoiceState) -> Result) -> Result {
+        var state = diskChoice
+        let result = change(&state)
+        guard state != diskChoice else { return result }
+        diskChoice = state
+        var newSettings = settings, newSetupState = setupState
+        state.save(into: &newSettings, &newSetupState)
+        if newSettings != settings {
+            settings = newSettings
+            system.saveSettings(settings)
         }
-        return true
+        if newSetupState != setupState {
+            setupState = newSetupState
+            system.saveSetupState(setupState)
+        }
+        return result
     }
 
-    /// Whether a second disk was added and the disk BackMeUp was using was kept as the choice,
-    /// until the user chooses again. Check 1 says so.
-    private var newDiskAdded = false
-
-    /// When Time Machine has several disks, nothing is chosen, and the disk BackMeUp last backed
-    /// up to as the only disk is among them, saves that disk as the choice, so backups carry on
-    /// there, whether or not BackMeUp was running when the disk was added. No alert is sent.
-    /// Versions before the last-used disk was saved left it nil, so after that update it asks.
-    private func keepUsedDiskIfOneWasAdded(_ reading: DestinationInfo) {
-        guard settings.destinationID == nil, !chosenDiskRemoved, let id = setupState.lastUsedDiskID,
-              case let .several(disks) = reading, disks.contains(where: { $0.id == id }) else { return }
-        settings.destinationID = id
-        newDiskAdded = true
-        system.saveSettings(settings)
-        // From here on the choice decides. Removing a disk chosen later asks, rather than
-        // going back to this one.
-        setupState.lastUsedDiskID = nil
-        system.saveSetupState(setupState)
-        system.log("Time Machine has a new disk; still backing up to the disk BackMeUp used")
+    /// Follows a new reading of Time Machine's disks: clears the choice when that disk left Time
+    /// Machine, sending the "choose a backup disk" alert once if there's a disk left to choose,
+    /// or keeps the disk BackMeUp used when a second one was added, with no alert. Returns
+    /// whether the choice was cleared. Backups wait until the user chooses again, however many
+    /// disks are left.
+    private func followDiskChoice(_ reading: DestinationInfo) -> Bool {
+        switch changeDiskChoice({ $0.update(for: reading) }) {
+        case .none:
+            return false
+        case let .chosenDiskRemoved(disksLeft):
+            system.log("The chosen backup disk is no longer in Time Machine\(disksLeft == 0 ? "" : "; asking which disk to back up to")")
+            if disksLeft > 0 {
+                send(Alert(
+                    kind: .chooseDisk,
+                    title: "Choose a backup disk",
+                    body: "The disk you chose is no longer in Time Machine, so backups are paused. Choose a disk in BackMeUp's checklist to start them again."
+                ))
+            }
+            return true
+        case .keptLastUsedDisk:
+            system.log("Time Machine has a new disk; still backing up to the disk BackMeUp used")
+            return false
+        }
     }
 
     /// At the first launch after an update, when Time Machine has several disks and none is
     /// chosen, backups wait for check 1 and the "choose a backup disk" alert is sent. Only that
     /// launch counts as the update, so it's sent once.
     private func askToChooseDiskAfterUpdateIfNeeded() {
-        guard !chosenDiskRemoved, case .several = destination,
+        guard !diskChoice.chosenDiskRemoved, case .several = destination,
               checklist?.item(.diskSetUp)?.needsDiskChoice == true else { return }
         system.log("Several Time Machine disks and none chosen after an update; asking which disk to back up to")
         send(Alert(
@@ -518,13 +507,9 @@ public final class Scheduler {
         let before = BackupVerdict.Before(await system.readPreferences(), destinationID: destinationID)
         backupCommandRunning = true
         updateSleepPrevention()
-        // Only a disk chosen from several is named, so with one disk the command is unchanged.
-        let chosenID = settings.destinationID == destinationID ? destinationID : nil
-        if chosenID == nil, case .configured = destination, let destinationID, setupState.lastUsedDiskID != destinationID {
-            setupState.lastUsedDiskID = destinationID
-            system.saveSetupState(setupState)
-        }
-        let exitCode = await system.startBackup(destinationID: chosenID)
+        let destinationArgument = diskChoice.destinationArgument(for: destinationID)
+        changeDiskChoice { $0.recordBackupStarting(to: destinationID) }
+        let exitCode = await system.startBackup(destinationID: destinationArgument)
         backupCommandRunning = false
         updateSleepPrevention()
         let verdict = BackupVerdict(
