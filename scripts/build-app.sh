@@ -34,6 +34,9 @@ else
     commit=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)
     if [ -n "$(git status --porcelain 2>/dev/null)" ]; then commit="$commit with uncommitted changes"; fi
     plutil -replace CFBundleShortVersionString -string "development build ($commit)" "$app/Contents/Info.plist"
+    # Lower than any release, so Sparkle offers a dev build every release. With the placeholder 1
+    # from Packaging/Info.plist, Sparkle counted every 0.x release as older.
+    plutil -replace CFBundleVersion -string "0" "$app/Contents/Info.plist"
 fi
 plutil -lint -s "$app/Contents/Info.plist"
 
