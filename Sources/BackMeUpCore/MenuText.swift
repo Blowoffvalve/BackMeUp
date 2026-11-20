@@ -65,11 +65,11 @@ struct MenuText {
         }
     }
 
-    /// "First backup: 35%, about 3 hours left", or "Backing up now" before Time Machine says.
+    /// "First backup: 35.0%, about 3 hours left", or "Backing up now" before Time Machine says.
     private var progressLine: String {
         guard let progress else { return "Backing up now" }
         let label = history.lastSuccess == nil ? "First backup" : "Backing up"
-        let percent = "\(label): \(Int(progress.fraction * 100))%"
+        let percent = "\(label): \(progress.percentText)"
         return timeLeft.map { "\(percent), \(Self.describe(timeLeft: $0))" } ?? percent
     }
 

@@ -23,7 +23,7 @@ struct ProgressLineTests {
         #expect(harness.statusLine == "Backing up now")
 
         await harness.advance(minutes: 5)
-        #expect(harness.statusLine == "First backup: 35%, about 3 hours left")
+        #expect(harness.statusLine == "First backup: 35.2%, about 3 hours left")
         #expect(harness.nextBackupLine == "")
     }
 
@@ -36,7 +36,7 @@ struct ProgressLineTests {
         await harness.backUpNow()
         await harness.advance(minutes: 1)
 
-        #expect(harness.statusLine == "Backing up: 50%, about 20 minutes left")
+        #expect(harness.statusLine == "Backing up: 50.0%, about 20 minutes left")
     }
 
     nonisolated static let timesLeft: [(TimeInterval, String)] = [
@@ -56,7 +56,7 @@ struct ProgressLineTests {
 
         await harness.scheduler.refreshStatus()
 
-        #expect(harness.statusLine == "First backup: 50%, \(expected)")
+        #expect(harness.statusLine == "First backup: 50.0%, \(expected)")
     }
 
     @Test func withoutTimeMachinesEstimateTheTimeLeftComesFromTheRateSoFar() async {
@@ -68,10 +68,10 @@ struct ProgressLineTests {
 
         await harness.start()
         await harness.advance(minutes: 10)
-        #expect(harness.statusLine == "First backup: 10%")
+        #expect(harness.statusLine == "First backup: 10.0%")
 
         await harness.advance(minutes: 30)
-        #expect(harness.statusLine == "First backup: 20%, about 4 hours left") // 10% per half hour
+        #expect(harness.statusLine == "First backup: 20.0%, about 4 hours left") // 10% per half hour
     }
 
     @Test func aTimeMachineBackupBackMeUpDidNotStartShowsProgressToo() async {
@@ -82,6 +82,6 @@ struct ProgressLineTests {
         await harness.start()
 
         #expect(harness.system.startedBackups.isEmpty)
-        #expect(harness.statusLine == "First backup: 90%, about 2 minutes left")
+        #expect(harness.statusLine == "First backup: 90.0%, about 2 minutes left")
     }
 }
