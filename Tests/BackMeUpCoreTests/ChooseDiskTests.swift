@@ -45,6 +45,128 @@ struct ChooseDiskTests {
         #expect(harness.checklistShown == 1)
     }
 
+    // MARK: Choosing
+
+    @Test func choosingTheEncryptedNetworkDiskPassesCheckThreeAndBacksUpToItOnAChosenNetwork() async {
+        let harness = harnessWithTwoDisks()
+        await harness.start()
+        let shownBefore = harness.checklistShown
+
+        await harness.scheduler.chooseDestination(id: "network-id")
+
+        let checklist = harness.scheduler.checklist
+        #expect(checklist?.item(.diskSetUp)?.state == .passed)
+        #expect(checklist?.item(.diskSetUp)?.chosenDiskID == "network-id")
+        #expect(checklist?.item(.diskEncrypted)?.state == .passed)
+        #expect(checklist?.item(.networkChosen)?.state == .passed)
+        #expect(harness.checklistShown == shownBefore)
+
+        // The backup held back for setup starts within a minute, to the chosen disk only.
+        await harness.advance(minutes: 1)
+        #expect(harness.system.startedBackups == [harness.minutes(1)])
+        #expect(harness.system.startedBackupDestinations == ["network-id"])
+        #expect(harness.statusLine == "Last backup: today 00:21")
+    }
+
+    @Test func theChosenNetworkDiskFollowsTheNetworkRule() async {
+        let harness = harnessWithTwoDisks()
+        harness.system.network = .router(address: "02:00:00:00:00:09", wifiName: "Cafe")
+        await harness.start()
+
+        await harness.scheduler.chooseDestination(id: "network-id")
+        await harness.advance(minutes: 1)
+
+        #expect(harness.system.startedBackups.isEmpty)
+        #expect(harness.scheduler.skipReason == .notOnChosenNetwork)
+    }
+
+    @Test func choosingTheUSBDiskWarnsAboutEncryptionAndNeedsNoNetwork() async {
+        let harness = harnessWithTwoDisks()
+        harness.system.network = .router(address: "02:00:00:00:00:09", wifiName: "Cafe")
+        await harness.start()
+
+        await harness.scheduler.chooseDestination(id: "usb-id")
+        await harness.advance(minutes: 1)
+
+        let checklist = harness.scheduler.checklist
+        #expect(checklist?.item(.diskSetUp)?.state == .passed)
+        #expect(checklist?.item(.diskEncrypted)?.state == .warning)
+        #expect(checklist?.item(.networkChosen)?.state == .notNeeded)
+        #expect(harness.system.startedBackupDestinations == ["usb-id"])
+    }
+
+    @Test func theChoiceIsKeptAcrossRestartsAndUpdates() async {
+        let harness = harnessWithTwoDisks()
+        await harness.start()
+        await harness.scheduler.chooseDestination(id: "network-id")
+
+        harness.system.appVersion = "2.0"
+        await harness.restart()
+
+        #expect(harness.scheduler.settings.destinationID == "network-id")
+        #expect(harness.scheduler.checklist?.item(.diskSetUp)?.state == .passed)
+        #expect(harness.system.startedBackupDestinations == ["network-id"])
+    }
+
+    @Test func settingsSavedBeforeDiskChoicesStillLoad() throws {
+        let saved = #"{"backupInterval":{"count":2,"unit":"days"},"retryMinutes":30,"allowBackupsOnBattery":false}"#
+        let settings = try JSONDecoder().decode(BackupSettings.self, from: Data(saved.utf8))
+        #expect(settings.backupInterval == BackupInterval(count: 2, unit: .days))
+        #expect(settings.destinationID == nil)
+
+        var chosen = settings
+        chosen.destinationID = "network-id"
+        let reloaded = try JSONDecoder().decode(BackupSettings.self, from: JSONEncoder().encode(chosen))
+        #expect(reloaded == chosen)
+    }
+
+    // MARK: The chosen disk disappears
+
+    @Test func removingTheChosenDiskWithTwoLeftClearsTheChoiceAndOpensTheChecklist() async {
+        let harness = harnessWithTwoDisks()
+        await harness.start()
+        await harness.scheduler.chooseDestination(id: "network-id")
+        await harness.advance(minutes: 30) // backs up to the network disk
+        let shownBefore = harness.checklistShown
+        harness.system.destinationInfo = .several([Self.usbDisk, Self.otherDisk])
+
+        await harness.advance(minutes: 24 * 60)
+
+        #expect(harness.scheduler.settings.destinationID == nil)
+        #expect(harness.system.storedSettings?.destinationID == nil)
+        #expect(harness.scheduler.checklist?.item(.diskSetUp)?.state == .failed)
+        #expect(harness.checklistShown == shownBefore + 1)
+        #expect(harness.system.startedBackupDestinations == ["network-id"])
+        #expect(harness.system.logLines.contains("The chosen backup disk is no longer in Time Machine; asking which disk to back up to"))
+    }
+
+    @Test func removingTheChosenDiskWithOneLeftUsesThatDisk() async {
+        let harness = harnessWithTwoDisks()
+        await harness.start()
+        await harness.scheduler.chooseDestination(id: "network-id")
+        await harness.advance(minutes: 30)
+        harness.system.destinationInfo = .configured(Self.usbDisk)
+
+        await harness.advance(minutes: 24 * 60)
+
+        #expect(harness.scheduler.settings.destinationID == nil)
+        #expect(harness.scheduler.checklist?.item(.diskSetUp)?.state == .passed)
+        #expect(harness.scheduler.checklist?.item(.networkChosen)?.state == .notNeeded)
+        #expect(harness.system.startedBackupDestinations == ["network-id", nil])
+        #expect(harness.system.logLines.contains("The chosen backup disk is no longer in Time Machine; backing up to the only disk left"))
+    }
+
+    @Test func whenTheDisksCannotBeReadTheChoiceIsKept() async {
+        let harness = harnessWithTwoDisks()
+        await harness.start()
+        await harness.scheduler.chooseDestination(id: "network-id")
+        harness.system.destinationInfo = .unknown
+
+        await harness.advance(minutes: 1)
+
+        #expect(harness.scheduler.settings.destinationID == "network-id")
+    }
+
     @Test func withOneDiskThereIsNothingToChoose() async {
         let harness = SchedulerHarness()
         harness.system.destinationInfo = .configured(Self.networkDisk)
