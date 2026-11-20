@@ -76,6 +76,9 @@ struct ChecklistInputs {
     var chosenDiskID: String?
     /// Whether the chosen disk left Time Machine and the user hasn't chosen again.
     var chosenDiskRemoved: Bool
+    /// Whether a second disk was added and the disk BackMeUp was using was kept as the choice,
+    /// until the user chooses again.
+    var newDiskAdded = false
     var preferences: TimeMachinePreferences?
     var networks: NetworkSettings
     var loginItem: LoginItemStatus
@@ -113,7 +116,8 @@ public struct Checklist: Equatable, Sendable {
     init(_ inputs: ChecklistInputs) {
         // Checks 1, 3 and 6 are about the chosen disk.
         let destination = inputs.destination.choosing(inputs.chosenDiskID)
-        var diskSetUp = Self.diskSetUp(destination, chosenDiskRemoved: inputs.chosenDiskRemoved)
+        var diskSetUp = Self.diskSetUp(destination, chosenDiskRemoved: inputs.chosenDiskRemoved,
+                                     newDiskAdded: inputs.newDiskAdded && inputs.destination.disks.count > 1)
         let disks = inputs.destination.disks
         if disks.count > 1 {
             diskSetUp.diskChoices = disks.compactMap { DiskChoice($0, preferences: inputs.preferences) }
@@ -137,12 +141,19 @@ public struct Checklist: Equatable, Sendable {
     private static let timeMachine = ChecklistItem.Action.openSystemSettings(.timeMachine)
     private static let timeMachineDirections = "Open System Settings, then General > Time Machine."
 
-    private static func diskSetUp(_ destination: DestinationInfo, chosenDiskRemoved: Bool) -> ChecklistItem {
+    private static func diskSetUp(_ destination: DestinationInfo, chosenDiskRemoved: Bool, newDiskAdded: Bool) -> ChecklistItem {
         let directions = "\(timeMachineDirections) Click Add Backup Disk and choose your backup disk."
         return switch destination {
-        case .configured:
-            ChecklistItem(check: .diskSetUp, state: .passed, sentence: "A Time Machine disk is set up.",
-                          action: timeMachine, directions: directions)
+        case let .configured(disk):
+            ChecklistItem(
+                check: .diskSetUp,
+                state: .passed,
+                sentence: newDiskAdded
+                    ? "Time Machine has a new disk. BackMeUp still backs up to \(disk.displayName)."
+                    : "A Time Machine disk is set up.",
+                action: timeMachine,
+                directions: directions
+            )
         case .several:
             ChecklistItem(
                 check: .diskSetUp,

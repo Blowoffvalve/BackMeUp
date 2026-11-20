@@ -196,11 +196,13 @@ public final class Scheduler {
         // The saved choice is read only after every await, so a disk chosen while this reading
         // was in flight is the one it uses.
         let choiceCleared = forgetChosenDiskIfGone(reading)
+        keepUsedDiskIfOneWasAdded(reading)
         destination = reading.choosing(settings.destinationID)
         let checklist = Checklist(ChecklistInputs(
             destination: reading,
             chosenDiskID: settings.destinationID,
             chosenDiskRemoved: chosenDiskRemoved,
+            newDiskAdded: newDiskAdded,
             preferences: preferences,
             networks: networks,
             loginItem: system.readLoginItemStatus(),
@@ -234,6 +236,7 @@ public final class Scheduler {
         guard !isUninstalled, id != settings.destinationID else { return }
         settings.destinationID = id
         chosenDiskRemoved = false
+        newDiskAdded = false
         system.saveSettings(settings)
         system.log("Chose the backup disk")
         await readChecklist()
@@ -261,6 +264,24 @@ public final class Scheduler {
         }
         system.log("The chosen backup disk is no longer in Time Machine\(next)")
         return true
+    }
+
+    /// Whether a second disk was added and the disk BackMeUp was using was kept as the choice,
+    /// until the user chooses again. Check 1 says so.
+    private var newDiskAdded = false
+
+    /// When Time Machine goes from one disk to several and nothing is chosen, saves the disk
+    /// BackMeUp was backing up to as the choice, so backups carry on there. No alert is sent.
+    /// The disk it was using is known only from an earlier reading in this run, so a disk added
+    /// while BackMeUp wasn't running (including across an update) is asked about instead.
+    private func keepUsedDiskIfOneWasAdded(_ reading: DestinationInfo) {
+        guard settings.destinationID == nil,
+              case let .configured(used)? = destination, let id = used.id,
+              case let .several(disks) = reading, disks.contains(where: { $0.id == id }) else { return }
+        settings.destinationID = id
+        newDiskAdded = true
+        system.saveSettings(settings)
+        system.log("Time Machine has a new disk; still backing up to the disk BackMeUp used")
     }
 
     /// A backup held back by an unfinished checklist starts as soon as the checklist allows it,

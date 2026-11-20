@@ -24,6 +24,13 @@ public struct Destination: Equatable, Sendable {
     }
 }
 
+extension Destination {
+    /// The disk's name for the user, or "Unnamed disk" when it has none.
+    var displayName: String {
+        name.flatMap { $0.isEmpty ? nil : $0 } ?? "Unnamed disk"
+    }
+}
+
 /// The Time Machine destinations, from `tmutil destinationinfo -X`.
 public enum DestinationInfo: Equatable, Sendable {
     /// One disk: BackMeUp backs up to it.
@@ -112,8 +119,7 @@ public struct DiskChoice: Equatable, Sendable {
         case .notEncrypted?: details.append("not encrypted")
         case .unknown?, nil: break
         }
-        let name = disk.name.flatMap { $0.isEmpty ? nil : $0 } ?? "Unnamed disk"
-        self.init(id: id, label: "\(name) (\(details.joined(separator: ", ")))")
+        self.init(id: id, label: "\(disk.displayName) (\(details.joined(separator: ", ")))")
     }
 }
 

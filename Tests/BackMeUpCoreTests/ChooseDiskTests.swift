@@ -201,6 +201,67 @@ struct ChooseDiskTests {
         #expect(reloaded == chosen)
     }
 
+    // MARK: A second disk is added
+
+    /// The Mac has backed up to its only disk, the old USB disk.
+    func harnessBackingUpToOneDisk() async -> SchedulerHarness {
+        let harness = harnessWithTwoDisks()
+        harness.system.destinationInfo = .configured(Self.usbDisk)
+        await harness.start()
+        return harness
+    }
+
+    @Test func addingASecondDiskKeepsBackingUpToTheFirstWithoutAnAlert() async {
+        let harness = await harnessBackingUpToOneDisk()
+        let shownBefore = harness.checklistShown
+        harness.system.destinationInfo = .several([Self.usbDisk, Self.networkDisk])
+
+        await harness.advance(minutes: 24 * 60)
+
+        #expect(harness.scheduler.settings.destinationID == "usb-id")
+        #expect(harness.system.storedSettings?.destinationID == "usb-id")
+        let check = harness.scheduler.checklist?.item(.diskSetUp)
+        #expect(check?.state == .passed)
+        #expect(check?.sentence == "Time Machine has a new disk. BackMeUp still backs up to Old Disk.")
+        #expect(check?.diskChoices.map(\.id) == ["usb-id", "network-id"])
+        #expect(check?.chosenDiskID == "usb-id")
+        #expect(check?.needsDiskChoice == false)
+        #expect(harness.system.startedBackupDestinations == [nil, "usb-id"])
+        #expect(harness.notifications.isEmpty)
+        #expect(harness.system.ntfyMessages.isEmpty)
+        #expect(harness.checklistShown == shownBefore)
+        #expect(harness.system.logLines.contains("Time Machine has a new disk; still backing up to the disk BackMeUp used"))
+    }
+
+    @Test func afterASecondDiskIsAddedSwitchingToItWorks() async {
+        let harness = await harnessBackingUpToOneDisk()
+        harness.system.destinationInfo = .several([Self.usbDisk, Self.networkDisk])
+        await harness.advance(minutes: 1)
+
+        await harness.scheduler.chooseDisk(id: "network-id")
+        await harness.advance(minutes: 24 * 60)
+
+        let check = harness.scheduler.checklist?.item(.diskSetUp)
+        #expect(check?.state == .passed)
+        #expect(check?.sentence == "A Time Machine disk is set up.")
+        #expect(check?.chosenDiskID == "network-id")
+        #expect(harness.scheduler.checklist?.item(.diskEncrypted)?.state == .passed)
+        #expect(harness.system.startedBackupDestinations == [nil, "network-id"])
+    }
+
+    @Test func aSecondDiskFoundAtTheFirstLaunchAfterAnUpdateIsNotChosenForTheUser() async {
+        let harness = await harnessBackingUpToOneDisk()
+        harness.system.destinationInfo = .several([Self.usbDisk, Self.networkDisk])
+
+        harness.system.appVersion = "2.0"
+        await harness.restart()
+
+        #expect(harness.scheduler.settings.destinationID == nil)
+        #expect(harness.scheduler.checklist?.item(.diskSetUp)?.state == .failed)
+        #expect(harness.scheduler.checklist?.item(.diskSetUp)?.needsDiskChoice == true)
+        #expect(harness.system.startedBackupDestinations == [nil])
+    }
+
     // MARK: The chosen disk disappears
 
     @Test func removingTheChosenDiskWithTwoLeftClearsTheChoiceAndOpensTheChecklist() async {
