@@ -271,17 +271,20 @@ public final class Scheduler {
     /// until the user chooses again. Check 1 says so.
     private var newDiskAdded = false
 
-    /// When Time Machine goes from one disk to several and nothing is chosen, saves the disk
-    /// BackMeUp was backing up to as the choice, so backups carry on there. No alert is sent.
-    /// The disk it was using is known only from an earlier reading in this run, so a disk added
-    /// while BackMeUp wasn't running (including across an update) is asked about instead.
+    /// When Time Machine has several disks, nothing is chosen, and the disk BackMeUp last backed
+    /// up to as the only disk is among them, saves that disk as the choice, so backups carry on
+    /// there, whether or not BackMeUp was running when the disk was added. No alert is sent.
+    /// Versions before the last-used disk was saved left it nil, so after that update it asks.
     private func keepUsedDiskIfOneWasAdded(_ reading: DestinationInfo) {
-        guard settings.destinationID == nil,
-              case let .configured(used)? = destination, let id = used.id,
+        guard settings.destinationID == nil, let id = setupState.lastUsedDiskID,
               case let .several(disks) = reading, disks.contains(where: { $0.id == id }) else { return }
         settings.destinationID = id
         newDiskAdded = true
         system.saveSettings(settings)
+        // From here on the choice decides. Removing a disk chosen later asks, rather than
+        // going back to this one.
+        setupState.lastUsedDiskID = nil
+        system.saveSetupState(setupState)
         system.log("Time Machine has a new disk; still backing up to the disk BackMeUp used")
     }
 
@@ -492,6 +495,10 @@ public final class Scheduler {
         updateSleepPrevention()
         // Only a disk chosen from several is named, so with one disk the command is unchanged.
         let chosenID = settings.destinationID == destinationID ? destinationID : nil
+        if chosenID == nil, case .configured = destination, let destinationID, setupState.lastUsedDiskID != destinationID {
+            setupState.lastUsedDiskID = destinationID
+            system.saveSetupState(setupState)
+        }
         let exitCode = await system.startBackup(destinationID: chosenID)
         backupCommandRunning = false
         updateSleepPrevention()

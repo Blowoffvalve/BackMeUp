@@ -309,9 +309,42 @@ struct ChooseDiskTests {
         #expect(harness.system.startedBackupDestinations == [nil, "network-id"])
     }
 
+    @Test func aSecondDiskAddedWhileBackMeUpWasQuitKeepsBackingUpToTheFirst() async {
+        let harness = await harnessBackingUpToOneDisk()
+        harness.quit()
+        harness.system.destinationInfo = .several([Self.usbDisk, Self.networkDisk])
+
+        await harness.restart()
+        await harness.advance(minutes: 24 * 60)
+
+        #expect(harness.scheduler.settings.destinationID == "usb-id")
+        let check = harness.scheduler.checklist?.item(.diskSetUp)
+        #expect(check?.state == .passed)
+        #expect(check?.sentence == "Time Machine has a new disk. BackMeUp still backs up to Old Disk.")
+        #expect(check?.needsDiskChoice == false)
+        #expect(harness.system.startedBackupDestinations == [nil, "usb-id"])
+        #expect(harness.notifications.isEmpty)
+    }
+
+    @Test func removingADiskChosenAfterTheSwitchStillAsksRatherThanGoingBackToTheFirst() async {
+        let harness = await harnessBackingUpToOneDisk()
+        harness.system.destinationInfo = .several([Self.usbDisk, Self.networkDisk])
+        await harness.advance(minutes: 1)
+        await harness.scheduler.chooseDisk(id: "network-id")
+
+        harness.system.destinationInfo = .several([Self.usbDisk, Self.otherDisk])
+        await harness.advance(minutes: 1)
+
+        #expect(harness.scheduler.settings.destinationID == nil)
+        #expect(harness.scheduler.checklist?.item(.diskSetUp)?.state == .failed)
+        #expect(harness.scheduler.checklist?.item(.diskSetUp)?.needsDiskChoice == true)
+    }
+
     @Test func aSecondDiskFoundAtTheFirstLaunchAfterAnUpdateIsNotChosenForTheUser() async {
         let harness = await harnessBackingUpToOneDisk()
         harness.system.destinationInfo = .several([Self.usbDisk, Self.networkDisk])
+        // Versions before this one never saved the disk they backed up to.
+        harness.system.storedSetupState = SetupState(firstRunDone: true, lastLaunchedVersion: "1.0")
 
         harness.system.appVersion = "2.0"
         await harness.restart()
@@ -320,6 +353,13 @@ struct ChooseDiskTests {
         #expect(harness.scheduler.checklist?.item(.diskSetUp)?.state == .failed)
         #expect(harness.scheduler.checklist?.item(.diskSetUp)?.needsDiskChoice == true)
         #expect(harness.system.startedBackupDestinations == [nil])
+    }
+
+    @Test func setupStateSavedBeforeTheLastUsedDiskStillLoads() throws {
+        let saved = #"{"firstRunDone":true,"lastLaunchedVersion":"1.0","networksAskedAbout":["02:00:00:00:00:09"]}"#
+        let state = try JSONDecoder().decode(SetupState.self, from: Data(saved.utf8))
+        #expect(state.firstRunDone)
+        #expect(state.lastUsedDiskID == nil)
     }
 
     // MARK: The chosen disk disappears
