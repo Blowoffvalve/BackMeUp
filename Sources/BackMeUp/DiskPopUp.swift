@@ -17,6 +17,10 @@ final class DiskPopUp: NSObject {
         view = NSStackView(views: [NSTextField(labelWithString: "Back up to"), popUp])
         super.init()
         popUp.autoenablesItems = false
+        // A long disk name is cut short with "…" rather than widening the window; the open menu
+        // and the tooltip show it in full.
+        popUp.widthAnchor.constraint(lessThanOrEqualToConstant: 340).isActive = true
+        popUp.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         popUp.target = self
         popUp.action = #selector(chosen(_:))
     }
@@ -43,10 +47,12 @@ final class DiskPopUp: NSObject {
             if choice.id == item.chosenDiskID { popUp.select(menuItem) }
         }
         if item.needsDiskChoice { popUp.selectItem(at: 0) }
+        popUp.toolTip = popUp.titleOfSelectedItem
     }
 
     @objc private func chosen(_ sender: NSPopUpButton) {
         guard let id = sender.selectedItem?.representedObject as? String else { return }
+        popUp.toolTip = sender.titleOfSelectedItem
         Task { await scheduler.chooseDisk(id: id) }
     }
 }

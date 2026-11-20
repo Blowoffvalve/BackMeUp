@@ -58,6 +58,8 @@ final class NetworkSettingsSection: NSObject {
     private lazy var allowRow = NSStackView(views: [allowButton, currentNetworkNote])
 
     let view = NSStackView()
+    /// Called when the list changes, so the window can fit it.
+    var onResize: (() -> Void)?
 
     init(scheduler: Scheduler) {
         self.scheduler = scheduler
@@ -103,10 +105,7 @@ final class NetworkSettingsSection: NSObject {
         }
         drawAllowRow()
         // Fit the window to the list as networks are added and removed.
-        if let window = view.window, let content = window.contentView {
-            content.layoutSubtreeIfNeeded()
-            window.setContentSize(content.fittingSize)
-        }
+        onResize?()
     }
 
     /// The button is there only while backups are limited to chosen networks and the network the

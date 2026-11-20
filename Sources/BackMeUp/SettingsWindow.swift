@@ -10,6 +10,8 @@ final class SettingsWindowController: NSObject {
     private let scheduler: Scheduler
     private let updater: AppUpdater
     private var window: NSWindow?
+    /// Everything in the window, inside a scroll view so it fits on short screens.
+    private var stack: NSStackView?
 
     private let intervalField = NSTextField()
     private let intervalStepper = NSStepper()
@@ -36,8 +38,11 @@ final class SettingsWindowController: NSObject {
     }
 
     func show() {
-        if window == nil { window = makeWindow() }
+        let isNew = window == nil
+        if isNew { window = makeWindow() }
         load()
+        fitWindow()
+        if isNew { window?.center() }
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
         // The network may have changed since the last reading; redraw once it's read again.
@@ -62,10 +67,33 @@ final class SettingsWindowController: NSObject {
         diskPopUp.reload(scheduler.checklist?.item(.diskSetUp))
         diskNote.isHidden = diskPopUp.view.isHidden
         // Fit the window as the pop-up appears or goes.
-        if wasHidden != diskPopUp.view.isHidden, let window, let content = window.contentView {
-            content.layoutSubtreeIfNeeded()
-            window.setContentSize(content.fittingSize)
+        if wasHidden != diskPopUp.view.isHidden { fitWindow() }
+    }
+
+    /// Sizes the window to its settings, but no taller than the screen it's on; the rest scrolls.
+    /// The user can make it taller, up to the height of all the settings.
+    private func fitWindow() {
+        guard let window, let stack else { return }
+        stack.layoutSubtreeIfNeeded()
+        let fitting = stack.fittingSize
+        let screen = (window.screen ?? NSScreen.main)?.visibleFrame
+        let screenHeight = screen.map { window.contentRect(forFrameRect: $0).height } ?? fitting.height
+        let height = min(fitting.height, screenHeight)
+        // Scroll bars that always show take room from the settings; add it back.
+        let scrollerWidth = height < fitting.height && NSScroller.preferredScrollerStyle == .legacy
+            ? NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy) : 0
+        let size = NSSize(width: fitting.width + scrollerWidth, height: height)
+        window.contentMinSize = NSSize(width: size.width, height: min(200, height))
+        window.contentMaxSize = NSSize(width: size.width, height: fitting.height)
+
+        // Keep the top left corner where it was, then move the window back onto the screen.
+        var frame = window.frameRect(forContentRect: NSRect(origin: .zero, size: size))
+        frame.origin = NSPoint(x: window.frame.minX, y: window.frame.maxY - frame.height)
+        if let screen {
+            frame.origin.y = min(max(frame.minY, screen.minY), screen.maxY - frame.height)
+            frame.origin.x = min(max(frame.minX, screen.minX), screen.maxX - frame.width)
         }
+        window.setFrame(frame, display: true)
     }
 
     // MARK: Building the window
@@ -108,17 +136,39 @@ final class SettingsWindowController: NSObject {
         stack.alignment = .leading
         stack.spacing = 8
         stack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
+        self.stack = stack
+        networkSection.onResize = { [weak self] in self?.fitWindow() }
+
+        // The stack fills the scroll view's width and scrolls up and down.
+        let document = FlippedView()
+        document.translatesAutoresizingMaskIntoConstraints = false
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        document.addSubview(stack)
+        let scrollView = NSScrollView()
+        scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = true
+        scrollView.drawsBackground = false
+        scrollView.documentView = document
+        let clip = scrollView.contentView
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: document.topAnchor),
+            stack.bottomAnchor.constraint(equalTo: document.bottomAnchor),
+            stack.leadingAnchor.constraint(equalTo: document.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: document.trailingAnchor),
+            document.topAnchor.constraint(equalTo: clip.topAnchor),
+            document.leadingAnchor.constraint(equalTo: clip.leadingAnchor),
+            document.trailingAnchor.constraint(equalTo: clip.trailingAnchor),
+        ])
 
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 520, height: 290),
-            styleMask: [.titled, .closable],
+            styleMask: [.titled, .closable, .resizable],
             backing: .buffered,
             defer: false
         )
         window.title = "BackMeUp Settings"
-        window.contentView = stack
+        window.contentView = scrollView
         window.isReleasedWhenClosed = false
-        window.center()
         return window
     }
 
@@ -191,4 +241,9 @@ final class SettingsWindowController: NSObject {
         // Show the minimums the scheduler applied.
         load()
     }
+}
+
+/// Lays its content out from the top, so a scroll view starts at the first setting.
+private final class FlippedView: NSView {
+    override var isFlipped: Bool { true }
 }
