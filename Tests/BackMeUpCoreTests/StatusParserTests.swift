@@ -8,8 +8,13 @@ struct StatusParserTests {
     }
 
     @Test(arguments: ["status-running-mounting.plist", "status-running-copying.plist"])
-    func runningBackup(fixtureName: String) throws {
-        #expect(TimeMachineStatus(statusOutput: try fixture(fixtureName)) == .running)
+    func runningBackupNamesItsDisk(fixtureName: String) throws {
+        #expect(TimeMachineStatus(statusOutput: try fixture(fixtureName)) == .running(destinationID: "00000000-0000-0000-0000-000000000001"))
+    }
+
+    @Test func aRunningBackupWithoutADestinationIDStillCounts() {
+        let output = "<plist version=\"1.0\"><dict><key>Running</key><true/></dict></plist>"
+        #expect(TimeMachineStatus(statusOutput: output) == .running(destinationID: nil))
     }
 
     @Test(arguments: [

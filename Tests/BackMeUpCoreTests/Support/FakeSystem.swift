@@ -90,11 +90,12 @@ final class FakeSystem: System {
 
     /// Time Machine reports itself running while a backup started through the port runs.
     func readTimeMachineStatus() async -> TimeMachineStatus {
-        runningBackup != nil ? .running : timeMachineStatus
+        runningBackup != nil ? .running(destinationID: backingUpTo) : timeMachineStatus
     }
 
     func readBackupProgress() async -> BackupProgress? {
-        runningBackup != nil || timeMachineStatus == .running ? backupProgress : nil
+        guard case .running = await readTimeMachineStatus() else { return nil }
+        return backupProgress
     }
 
     func readDestinationInfo() async -> DestinationInfo {

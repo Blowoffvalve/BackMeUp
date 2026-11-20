@@ -87,6 +87,30 @@ struct ChooseDiskTests {
         #expect(harness.checklistShown == shownBefore)
     }
 
+    // MARK: Status and progress
+
+    nonisolated static let runningBackups: [(String?, String)] = [
+        ("network-id", "First backup: 50.0%, about 2 minutes left"),
+        // Time Machine doesn't say which disk: shown, as with one disk.
+        (nil, "First backup: 50.0%, about 2 minutes left"),
+        ("usb-id", "Backup skipped: setup isn't finished"),
+    ]
+
+    /// Time Machine backing up by itself: only a backup to the chosen disk shows. The backup held
+    /// back before the choice is still the latest news otherwise.
+    @Test(arguments: runningBackups)
+    func statusAndProgressFollowTheChosenDisk(runningTo: String?, expected: String) async {
+        let harness = harnessWithTwoDisks()
+        await harness.start()
+        await harness.scheduler.chooseDisk(id: "network-id")
+        harness.system.timeMachineStatus = .running(destinationID: runningTo)
+        harness.system.backupProgress = BackupProgress(fraction: 0.5, timeRemaining: 120)
+
+        await harness.scheduler.refreshStatus()
+
+        #expect(harness.statusLine == expected)
+    }
+
     @Test func theChosenNetworkDiskFollowsTheNetworkRule() async {
         let harness = harnessWithTwoDisks()
         harness.system.network = .router(address: "02:00:00:00:00:09", wifiName: "Cafe")

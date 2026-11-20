@@ -46,6 +46,19 @@ public final class Scheduler {
     /// The first progress seen in the running backup, to estimate the time left from.
     private var progressStart: (date: Date, fraction: Double)?
     private var backupTask: Task<Void, Never>?
+
+    /// Whether Time Machine is backing up, to any disk. No backup starts while it is.
+    private var isTimeMachineRunning: Bool {
+        if case .running = timeMachineStatus { true } else { false }
+    }
+
+    /// Whether Time Machine is backing up to the chosen disk, for the status line and progress.
+    /// With no disk chosen, or when Time Machine doesn't say which disk, any backup counts.
+    private var isTimeMachineRunningToChosenDisk: Bool {
+        guard case let .running(runningTo) = timeMachineStatus else { return false }
+        guard let chosen = settings.destinationID, let runningTo else { return true }
+        return runningTo == chosen
+    }
     /// Whether Time Machine's backup command is running for BackMeUp right now.
     private var backupCommandRunning = false
 
@@ -107,7 +120,7 @@ public final class Scheduler {
         }
         askToChooseThisNetworkIfNeeded()
         updateSleepPrevention()
-        if !isBackingUp, timeMachineStatus != .running,
+        if !isBackingUp, !isTimeMachineRunning,
            system.now >= nextBackupDue || isBackOnAChosenNetwork || isSetupJustFinished {
             startAttempt(byPerson: false)
         }
@@ -552,7 +565,7 @@ public final class Scheduler {
     // MARK: Progress
 
     private func readProgress() async {
-        guard timeMachineStatus == .running else {
+        guard isTimeMachineRunningToChosenDisk else {
             progress = nil
             progressStart = nil
             return
@@ -583,7 +596,7 @@ public final class Scheduler {
         let text = MenuText(
             history: history,
             nextBackupDue: nextBackupDue,
-            isBackingUp: isBackingUp || timeMachineStatus == .running,
+            isBackingUp: isBackingUp || isTimeMachineRunningToChosenDisk,
             progress: progress,
             timeLeft: timeLeft,
             isWaitingForSetup: checklist?.allowsBackups == false,

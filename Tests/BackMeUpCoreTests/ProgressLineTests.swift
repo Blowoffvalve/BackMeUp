@@ -51,7 +51,7 @@ struct ProgressLineTests {
     @Test(arguments: timesLeft)
     func timeLeftIsRoundedToSomethingReadable(seconds: TimeInterval, expected: String) async {
         let harness = harnessWithNetworkDisk()
-        harness.system.timeMachineStatus = .running
+        harness.system.timeMachineStatus = .running(destinationID: nil)
         harness.system.backupProgress = BackupProgress(fraction: 0.5, timeRemaining: seconds)
 
         await harness.scheduler.refreshStatus()
@@ -76,7 +76,7 @@ struct ProgressLineTests {
 
     @Test func aTimeMachineBackupBackMeUpDidNotStartShowsProgressToo() async {
         let harness = harnessWithNetworkDisk()
-        harness.system.timeMachineStatus = .running
+        harness.system.timeMachineStatus = .running(destinationID: nil)
         harness.system.backupProgress = BackupProgress(fraction: 0.9, timeRemaining: 120)
 
         await harness.start()
