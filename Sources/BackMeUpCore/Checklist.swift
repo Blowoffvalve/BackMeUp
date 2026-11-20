@@ -80,6 +80,8 @@ struct ChecklistInputs {
     /// until the user chooses again.
     var newDiskAdded = false
     var preferences: TimeMachinePreferences?
+    /// The scheduler's clock, for how long ago each disk was last backed up to.
+    var now: Date
     var networks: NetworkSettings
     var loginItem: LoginItemStatus
     var notifications: NotificationPermission
@@ -120,7 +122,7 @@ public struct Checklist: Equatable, Sendable {
                                      newDiskAdded: inputs.newDiskAdded && inputs.destination.disks.count > 1)
         let disks = inputs.destination.disks
         if disks.count > 1 {
-            diskSetUp.diskChoices = disks.compactMap { DiskChoice($0, preferences: inputs.preferences) }
+            diskSetUp.diskChoices = disks.compactMap { DiskChoice($0, preferences: inputs.preferences, now: inputs.now) }
             if case .configured = destination { diskSetUp.chosenDiskID = inputs.chosenDiskID }
         }
         items = [

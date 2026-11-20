@@ -101,7 +101,8 @@ extension DestinationInfo {
 public struct DiskChoice: Equatable, Sendable {
     /// Time Machine's ID for the disk, saved as the choice.
     public var id: String
-    /// Its name and kind, and whether it's encrypted when that's known: "Backups (Network disk, encrypted)".
+    /// Its name and kind, whether it's encrypted when that's known, and when it was last backed
+    /// up to: "Backups (Network disk, encrypted, last backup 3 days ago)".
     public var label: String
 
     public init(id: String, label: String) {
@@ -111,15 +112,33 @@ public struct DiskChoice: Equatable, Sendable {
 
     /// nil for a disk without an ID, which can't be chosen. The parser leaves those out when
     /// there are several.
-    init?(_ disk: Destination, preferences: TimeMachinePreferences?) {
+    init?(_ disk: Destination, preferences: TimeMachinePreferences?, now: Date) {
         guard let id = disk.id else { return nil }
+        let entry = preferences?.destinations.first { $0.id == id }
         var details = [disk.kind == .network ? "Network disk" : "USB disk"]
-        switch preferences?.destinations.first(where: { $0.id == id })?.encryption {
+        switch entry?.encryption {
         case .encrypted?: details.append("encrypted")
         case .notEncrypted?: details.append("not encrypted")
         case .unknown?, nil: break
         }
+        details.append(entry?.latestSnapshot.map { "last backup \(Self.describe(age: now.timeIntervalSince($0)))" } ?? "never backed up")
         self.init(id: id, label: "\(disk.displayName) (\(details.joined(separator: ", ")))")
+    }
+
+    /// "less than a minute ago", "45 minutes ago", "5 hours ago", "3 days ago", "4 months ago".
+    /// Rounded down, so "1 day ago" means at least a whole day. A snapshot dated after now (a
+    /// clock that moved back) counts as just made.
+    private static func describe(age seconds: TimeInterval) -> String {
+        func ago(_ count: Double, _ unit: String) -> String {
+            let count = Int(count.rounded(.down))
+            return "\(count) \(unit)\(count == 1 ? "" : "s") ago"
+        }
+        let minutes = seconds / 60, hours = minutes / 60, days = hours / 24
+        if minutes < 1 { return "less than a minute ago" }
+        if hours < 1 { return ago(minutes, "minute") }
+        if days < 1 { return ago(hours, "hour") }
+        if days < 60 { return ago(days, "day") }
+        return ago(days / 30, "month")
     }
 }
 

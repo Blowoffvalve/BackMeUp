@@ -204,6 +204,7 @@ public final class Scheduler {
             chosenDiskRemoved: chosenDiskRemoved,
             newDiskAdded: newDiskAdded,
             preferences: preferences,
+            now: system.now,
             networks: networks,
             loginItem: system.readLoginItemStatus(),
             notifications: notifications,
