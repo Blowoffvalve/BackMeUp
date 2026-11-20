@@ -448,27 +448,84 @@ struct ChooseDiskTests {
 
         await harness.advance(minutes: 60)
         #expect(harness.scheduler.checklist?.item(.diskSetUp)?.sentence
-            == "The disk you chose is no longer in Time Machine. Choose which disk BackMeUp backs up to.")
+            == "The disk you chose is no longer in Time Machine. Choose a disk to start backups again.")
         #expect(harness.scheduler.checklist?.item(.diskSetUp)?.needsDiskChoice == true)
 
         await harness.scheduler.chooseDisk(id: "other-id")
         #expect(harness.scheduler.checklist?.item(.diskSetUp)?.sentence == "A Time Machine disk is set up.")
     }
 
-    @Test func removingTheChosenDiskWithOneLeftUsesThatDisk() async {
+    @Test func removingTheChosenDiskWithOneLeftPausesBackupsAndAsks() async {
+        let harness = harnessWithTwoDisks()
+        await harness.start()
+        await harness.scheduler.chooseDisk(id: "network-id")
+        await harness.advance(minutes: 30) // backs up to the network disk
+        let shownBefore = harness.checklistShown
+        harness.system.destinationInfo = .configured(Self.usbDisk)
+
+        await harness.advance(minutes: 24 * 60)
+
+        let check = harness.scheduler.checklist?.item(.diskSetUp)
+        #expect(check?.state == .failed)
+        #expect(check?.sentence == "The disk you chose is no longer in Time Machine. Choose a disk to start backups again.")
+        #expect(check?.diskChoices.map(\.id) == ["usb-id"])
+        #expect(check?.needsDiskChoice == true)
+        #expect(harness.scheduler.skipReason == .setupNotFinished)
+        #expect(harness.statusLine == "Finish setting up: see the checklist")
+        #expect(harness.checklistShown == shownBefore + 1)
+        #expect(harness.system.startedBackupDestinations == ["network-id"])
+        #expect(harness.system.logLines.contains("The chosen backup disk is no longer in Time Machine; asking which disk to back up to"))
+    }
+
+    @Test func afterTheChosenDiskIsRemovedChoosingTheOneDiskLeftStartsBackupsAgain() async {
         let harness = harnessWithTwoDisks()
         await harness.start()
         await harness.scheduler.chooseDisk(id: "network-id")
         await harness.advance(minutes: 30)
         harness.system.destinationInfo = .configured(Self.usbDisk)
+        await harness.advance(minutes: 60)
 
+        await harness.scheduler.chooseDisk(id: "usb-id")
+        await harness.advance(minutes: 24 * 60)
+
+        let check = harness.scheduler.checklist?.item(.diskSetUp)
+        #expect(check?.state == .passed)
+        #expect(check?.sentence == "A Time Machine disk is set up.")
+        #expect(check?.diskChoices == [])
+        #expect(harness.system.startedBackupDestinations == ["network-id", "usb-id"])
+    }
+
+    @Test func theChosenDiskRemovedWithOneLeftStillAsksAfterARestart() async {
+        let harness = harnessWithTwoDisks()
+        await harness.start()
+        await harness.scheduler.chooseDisk(id: "network-id")
+        await harness.advance(minutes: 30)
+        harness.system.destinationInfo = .configured(Self.usbDisk)
+        await harness.advance(minutes: 1)
+
+        await harness.restart()
+        await harness.advance(minutes: 24 * 60)
+
+        #expect(harness.scheduler.checklist?.item(.diskSetUp)?.state == .failed)
+        #expect(harness.scheduler.checklist?.item(.diskSetUp)?.needsDiskChoice == true)
+        #expect(harness.system.startedBackupDestinations == ["network-id"])
+        #expect(harness.notifications.filter { $0.kind == .chooseDisk }.count == 1)
+    }
+
+    @Test func aRemovedChosenDiskNeverFallsBackToTheDiskBackMeUpUsedBefore() async {
+        // BackMeUp backed up to the USB disk while it was the only one, then the user chose
+        // the network disk from a different pair.
+        let harness = await harnessBackingUpToOneDisk()
+        harness.system.destinationInfo = .several([Self.networkDisk, Self.otherDisk])
+        await harness.advance(minutes: 1)
+        await harness.scheduler.chooseDisk(id: "network-id")
+
+        harness.system.destinationInfo = .several([Self.usbDisk, Self.otherDisk])
         await harness.advance(minutes: 24 * 60)
 
         #expect(harness.scheduler.settings.destinationID == nil)
-        #expect(harness.scheduler.checklist?.item(.diskSetUp)?.state == .passed)
-        #expect(harness.scheduler.checklist?.item(.networkChosen)?.state == .notNeeded)
-        #expect(harness.system.startedBackupDestinations == ["network-id", nil])
-        #expect(harness.system.logLines.contains("The chosen backup disk is no longer in Time Machine; backing up to the only disk left"))
+        #expect(harness.scheduler.checklist?.item(.diskSetUp)?.needsDiskChoice == true)
+        #expect(harness.system.startedBackupDestinations == [nil])
     }
 
     @Test func whenTheDisksCannotBeReadTheChoiceIsKept() async {
