@@ -113,6 +113,7 @@ public final class Scheduler {
             registerLoginItem()
         }
         await readChecklist()
+        if isUpdated { askToChooseDiskAfterUpdateIfNeeded() }
         if !setupState.firstRunDone || isUpdated {
             setupState.firstRunDone = true
             setupState.lastLaunchedVersion = system.appVersion
@@ -296,6 +297,20 @@ public final class Scheduler {
         setupState.lastUsedDiskID = nil
         system.saveSetupState(setupState)
         system.log("Time Machine has a new disk; still backing up to the disk BackMeUp used")
+    }
+
+    /// At the first launch after an update, when Time Machine has several disks and none is
+    /// chosen, backups wait for check 1 and the "choose a backup disk" alert is sent. Only that
+    /// launch counts as the update, so it's sent once.
+    private func askToChooseDiskAfterUpdateIfNeeded() {
+        guard !chosenDiskRemoved, case .several = destination,
+              checklist?.item(.diskSetUp)?.needsDiskChoice == true else { return }
+        system.log("Several Time Machine disks and none chosen after an update; asking which disk to back up to")
+        send(Alert(
+            kind: .chooseDisk,
+            title: "Choose a backup disk",
+            body: "Time Machine has more than one disk, so backups are paused until you choose which one BackMeUp backs up to. Choose it in BackMeUp's checklist."
+        ))
     }
 
     /// A backup held back by an unfinished checklist starts as soon as the checklist allows it,
