@@ -1,8 +1,8 @@
 import AppKit
 import BackMeUpCore
 
-/// The Settings window: which Time Machine disk to back up to (with two or more), how often to back up, how soon to retry, whether to back up on battery,
-/// and when to alert.
+/// The Settings window: which Time Machine disk to back up to (with two or more), how often to
+/// back up, how soon to retry, whether to back up on battery, and when to alert.
 ///
 /// Plain AppKit: SwiftUI's `@State` is a macro whose plugin the Command Line Tools don't ship.
 @MainActor

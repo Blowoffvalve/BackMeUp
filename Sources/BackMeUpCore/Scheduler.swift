@@ -182,7 +182,7 @@ public final class Scheduler {
         destination = reading.choosing(settings.destinationID)
         let checklist = Checklist(ChecklistInputs(
             destination: reading,
-            chosenDestinationID: settings.destinationID,
+            chosenDiskID: settings.destinationID,
             preferences: await system.readPreferences(),
             networks: networks,
             loginItem: system.readLoginItemStatus(),
@@ -212,7 +212,7 @@ public final class Scheduler {
 
     /// "Back up to": saves the disk BackMeUp backs up to, by its Time Machine ID, and re-reads
     /// the checklist straight away.
-    public func chooseDestination(id: String?) async {
+    public func chooseDisk(id: String?) async {
         guard !isUninstalled, id != settings.destinationID else { return }
         settings.destinationID = id
         system.saveSettings(settings)
@@ -376,7 +376,7 @@ public final class Scheduler {
     }
 
     /// Saves new settings, raised to the minimums. The chosen disk stays as it is: only
-    /// `chooseDestination(id:)` changes it.
+    /// `chooseDisk(id:)` changes it.
     public func updateSettings(_ newSettings: BackupSettings) {
         let destinationID = settings.destinationID
         settings = newSettings.validated
@@ -455,7 +455,7 @@ public final class Scheduler {
         backupCommandRunning = true
         updateSleepPrevention()
         // Only a disk chosen from several is named, so with one disk the command is unchanged.
-        let chosenID = settings.destinationID.flatMap { $0 == destinationID ? $0 : nil }
+        let chosenID = settings.destinationID == destinationID ? destinationID : nil
         let exitCode = await system.startBackup(destinationID: chosenID)
         backupCommandRunning = false
         updateSleepPrevention()

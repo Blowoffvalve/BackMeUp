@@ -45,6 +45,6 @@ final class DiskPopUp: NSObject {
 
     @objc private func chosen(_ sender: NSPopUpButton) {
         guard let id = sender.selectedItem?.representedObject as? String else { return }
-        Task { await scheduler.chooseDestination(id: id) }
+        Task { await scheduler.chooseDisk(id: id) }
     }
 }

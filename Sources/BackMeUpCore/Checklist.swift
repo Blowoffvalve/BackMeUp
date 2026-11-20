@@ -67,7 +67,7 @@ struct ChecklistInputs {
     /// Time Machine's disks as read.
     var destination: DestinationInfo
     /// The disk the user chose, when Time Machine has several.
-    var chosenDestinationID: String?
+    var chosenDiskID: String?
     var preferences: TimeMachinePreferences?
     var networks: NetworkSettings
     var loginItem: LoginItemStatus
@@ -104,11 +104,11 @@ public struct Checklist: Equatable, Sendable {
 
     init(_ inputs: ChecklistInputs) {
         // Checks 1, 3 and 6 are about the chosen disk.
-        let destination = inputs.destination.choosing(inputs.chosenDestinationID)
+        let destination = inputs.destination.choosing(inputs.chosenDiskID)
         var diskSetUp = Self.diskSetUp(destination)
         if case let .several(disks) = inputs.destination {
             diskSetUp.diskChoices = disks.compactMap { DiskChoice($0, preferences: inputs.preferences) }
-            if case .configured = destination { diskSetUp.chosenDiskID = inputs.chosenDestinationID }
+            if case .configured = destination { diskSetUp.chosenDiskID = inputs.chosenDiskID }
         }
         items = [
             diskSetUp,

@@ -52,7 +52,7 @@ struct ChooseDiskTests {
         await harness.start()
         let shownBefore = harness.checklistShown
 
-        await harness.scheduler.chooseDestination(id: "network-id")
+        await harness.scheduler.chooseDisk(id: "network-id")
 
         let checklist = harness.scheduler.checklist
         #expect(checklist?.item(.diskSetUp)?.state == .passed)
@@ -73,7 +73,7 @@ struct ChooseDiskTests {
         harness.system.network = .router(address: "02:00:00:00:00:09", wifiName: "Cafe")
         await harness.start()
 
-        await harness.scheduler.chooseDestination(id: "network-id")
+        await harness.scheduler.chooseDisk(id: "network-id")
         await harness.advance(minutes: 1)
 
         #expect(harness.system.startedBackups.isEmpty)
@@ -85,7 +85,7 @@ struct ChooseDiskTests {
         harness.system.network = .router(address: "02:00:00:00:00:09", wifiName: "Cafe")
         await harness.start()
 
-        await harness.scheduler.chooseDestination(id: "usb-id")
+        await harness.scheduler.chooseDisk(id: "usb-id")
         await harness.advance(minutes: 1)
 
         let checklist = harness.scheduler.checklist
@@ -98,7 +98,7 @@ struct ChooseDiskTests {
     @Test func theChoiceIsKeptAcrossRestartsAndUpdates() async {
         let harness = harnessWithTwoDisks()
         await harness.start()
-        await harness.scheduler.chooseDestination(id: "network-id")
+        await harness.scheduler.chooseDisk(id: "network-id")
 
         harness.system.appVersion = "2.0"
         await harness.restart()
@@ -111,7 +111,7 @@ struct ChooseDiskTests {
     @Test func savingTheOtherSettingsKeepsTheChoice() async {
         let harness = harnessWithTwoDisks()
         await harness.start()
-        await harness.scheduler.chooseDestination(id: "network-id")
+        await harness.scheduler.chooseDisk(id: "network-id")
 
         // The Settings window saves its fields as new settings, without the disk.
         harness.scheduler.updateSettings(BackupSettings(backupInterval: BackupInterval(count: 2, unit: .days), retryMinutes: 60))
@@ -137,7 +137,7 @@ struct ChooseDiskTests {
     @Test func removingTheChosenDiskWithTwoLeftClearsTheChoiceAndOpensTheChecklist() async {
         let harness = harnessWithTwoDisks()
         await harness.start()
-        await harness.scheduler.chooseDestination(id: "network-id")
+        await harness.scheduler.chooseDisk(id: "network-id")
         await harness.advance(minutes: 30) // backs up to the network disk
         let shownBefore = harness.checklistShown
         harness.system.destinationInfo = .several([Self.usbDisk, Self.otherDisk])
@@ -155,7 +155,7 @@ struct ChooseDiskTests {
     @Test func removingTheChosenDiskWithOneLeftUsesThatDisk() async {
         let harness = harnessWithTwoDisks()
         await harness.start()
-        await harness.scheduler.chooseDestination(id: "network-id")
+        await harness.scheduler.chooseDisk(id: "network-id")
         await harness.advance(minutes: 30)
         harness.system.destinationInfo = .configured(Self.usbDisk)
 
@@ -171,7 +171,7 @@ struct ChooseDiskTests {
     @Test func whenTheDisksCannotBeReadTheChoiceIsKept() async {
         let harness = harnessWithTwoDisks()
         await harness.start()
-        await harness.scheduler.chooseDestination(id: "network-id")
+        await harness.scheduler.chooseDisk(id: "network-id")
         harness.system.destinationInfo = .unknown
 
         await harness.advance(minutes: 1)
