@@ -31,9 +31,11 @@ The `Scheduler` is the core. Everything outside the app goes through the **Syste
 2. the battery rule: on battery with battery backups off. Back Up Now ignores it
 3. the disk: no disk set up, or a local disk that isn't mounted
 4. the network rule, for network disks and for a disk whose kind can't be read, never for a local disk
-5. then `tmutil startbackup --auto --block`, judged by the success rule. If Time Machine's `RESULT` is 18 (it couldn't reach the network disk, for example just after login while a VPN is still starting) and there's no new snapshot, the attempt is a skip ("network backup disk not reachable"), not a failure
+5. then `tmutil startbackup --auto --block` (with `--destination <ID>` for a disk chosen from several), judged by the success rule. If Time Machine's `RESULT` is 18 (it couldn't reach the network disk, for example just after login while a VPN is still starting) and there's no new snapshot, the attempt is a skip ("network backup disk not reachable"), not a failure
 
 Skips never count as failures. Each attempt is recorded in `BackupHistory` with its outcome: succeeded, failed (with a reason), skipped (with a reason) or paused. History keeps the last 200 attempts, plus a running tally since the last success (`SinceLastSuccess`) so alert counts stay right however many attempts are dropped.
+
+**Several Time Machine disks:** `DestinationInfo` lists every disk. With two or more, the user chooses one in check 1's "Back up to" pop-up or in Settings, and its `ID` is saved as `BackupSettings.destinationID`; until then check 1 fails and attempts skip with "setup isn't finished". Checks 1, 3 and 6, the network rule, the success rule and the `--destination` all follow the chosen disk. With one disk nothing is saved or shown. If the chosen disk leaves Time Machine, the choice is cleared and logged: with several left, check 1 asks again and the checklist opens; with one left, BackMeUp uses it. An unreadable `destinationinfo` keeps the choice.
 
 **Sleep prevention:** an IOKit assertion stops idle sleep only while BackMeUp's backup command runs on AC power. A power-source watcher releases it the moment the Mac is unplugged, without waiting for the next tick.
 
@@ -43,7 +45,7 @@ Skips never count as failures. Each attempt is recorded in `BackupHistory` with 
 
 **The real adapter, `RealSystem`** (split across `RealSystem*.swift`):
 
-- Runs `/usr/bin/tmutil status -X`, `tmutil destinationinfo -X`, `tmutil startbackup --auto --block` and `/usr/bin/defaults read /Library/Preferences/com.apple.TimeMachine` as subprocesses. `defaults` can read that file without Full Disk Access; reading the plist directly can't.
+- Runs `/usr/bin/tmutil status -X`, `tmutil destinationinfo -X`, `tmutil startbackup --auto --block [--destination <ID>]` and `/usr/bin/defaults read /Library/Preferences/com.apple.TimeMachine` as subprocesses. `defaults` can read that file without Full Disk Access; reading the plist directly can't.
 - Network identity: the first default route on a physical interface from `netstat -rn -f inet` (VPN and tunnel interfaces such as `utun` never count), then the router's hardware address from SystemConfiguration's `State:/Network/Service/*/IPv4`, falling back to `arp -an`. Nothing is sent on the network. The Wi-Fi name comes from CoreWLAN, only with Location permission, and is used only as a label.
 - `UserNotifications` for Mac notifications, `SMAppService.mainApp` for the login item, `x-apple.systempreferences:` links for System Settings, `URLSession` for ntfy, the Keychain for the ntfy topic and token, and a plain-text log at `~/Library/Logs/BackMeUp/BackMeUp.log`.
 
