@@ -4,16 +4,26 @@ import BackMeUpCore
 /// The first-run checklist window: the six checks, each with a plain sentence and a button.
 /// All decisions live in the Scheduler's `checklist`; this only draws it.
 @MainActor
-final class ChecklistWindowController: NSObject {
+final class ChecklistWindowController: NSObject, NSWindowDelegate {
+    /// How often the checks are re-read while the window is open, in seconds, so that a change
+    /// made in System Settings shows here straight away rather than at the next background tick.
+    private static let refreshInterval: TimeInterval = 2
+
     private let scheduler: Scheduler
     private let openBackMeUpSettings: () -> Void
+    /// Asks the scheduler to re-read the checks; the window redraws when it's done.
+    private let refresh: () -> Void
     private var window: NSWindow?
     private let stack = NSStackView()
+    private var refreshTimer: Timer?
+    /// What the window last drew, so that unchanged checks aren't rebuilt under the pointer.
+    private var drawn: (checklist: Checklist?, tip: String?)?
     private static let textWidth: CGFloat = 420
 
-    init(scheduler: Scheduler, openBackMeUpSettings: @escaping () -> Void) {
+    init(scheduler: Scheduler, openBackMeUpSettings: @escaping () -> Void, refresh: @escaping () -> Void) {
         self.scheduler = scheduler
         self.openBackMeUpSettings = openBackMeUpSettings
+        self.refresh = refresh
         super.init()
     }
 
@@ -24,6 +34,31 @@ final class ChecklistWindowController: NSObject {
         reload()
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
+        startRefreshing()
+    }
+
+    // MARK: Refreshing while open
+
+    private func startRefreshing() {
+        refresh()
+        guard refreshTimer == nil else { return }
+        let timer = Timer(timeInterval: Self.refreshInterval, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refresh() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        refreshTimer = timer
+    }
+
+    nonisolated func windowDidBecomeKey(_ notification: Notification) {
+        // Coming back from System Settings: re-read now rather than at the next timer fire.
+        MainActor.assumeIsolated { refresh() }
+    }
+
+    nonisolated func windowWillClose(_ notification: Notification) {
+        MainActor.assumeIsolated {
+            refreshTimer?.invalidate()
+            refreshTimer = nil
+        }
     }
 
     private func makeWindow() -> NSWindow {
@@ -40,6 +75,7 @@ final class ChecklistWindowController: NSObject {
         window.title = "Set Up BackMeUp"
         window.contentView = stack
         window.isReleasedWhenClosed = false
+        window.delegate = self
         window.center()
         return window
     }
@@ -47,6 +83,9 @@ final class ChecklistWindowController: NSObject {
     /// Redraws the checks from the scheduler's latest reading.
     func reload() {
         guard window != nil else { return }
+        let latest = (checklist: scheduler.checklist, tip: scheduler.checklistTip)
+        if let drawn, drawn.checklist == latest.checklist, drawn.tip == latest.tip { return }
+        drawn = latest
         stack.arrangedSubviews.forEach { $0.removeFromSuperview() }
         stack.addArrangedSubview(text(
             scheduler.checklist?.allowsBackups == false
