@@ -114,15 +114,20 @@ public struct DiskChoice: Equatable, Sendable {
     /// there are several.
     init?(_ disk: Destination, preferences: TimeMachinePreferences?, now: Date) {
         guard let id = disk.id else { return nil }
-        let entry = preferences?.destinations.first { $0.id == id }
+        self.init(id: id, label: Self.label(disk, preferences: preferences, now: now))
+    }
+
+    /// "Backups (Network disk, encrypted, last backup 3 days ago)".
+    static func label(_ disk: Destination, preferences: TimeMachinePreferences?, now: Date) -> String {
+        let entry = disk.id.flatMap { id in preferences?.destinations.first { $0.id == id } }
         var details = [disk.kind == .network ? "Network disk" : "USB disk"]
         switch entry?.encryption {
         case .encrypted?: details.append("encrypted")
         case .notEncrypted?: details.append("not encrypted")
         case .unknown?, nil: break
         }
-        details.append(entry?.latestSnapshot.map { "last backup \(Self.describe(age: now.timeIntervalSince($0)))" } ?? "never backed up")
-        self.init(id: id, label: "\(disk.displayName) (\(details.joined(separator: ", ")))")
+        details.append(entry?.latestSnapshot.map { "last backup \(describe(age: now.timeIntervalSince($0)))" } ?? "never backed up")
+        return "\(disk.displayName) (\(details.joined(separator: ", ")))"
     }
 
     /// "less than a minute ago", "45 minutes ago", "5 hours ago", "3 days ago", "4 months ago".
@@ -139,6 +144,19 @@ public struct DiskChoice: Equatable, Sendable {
         if days < 1 { return ago(hours, "hour") }
         if days < 60 { return ago(days, "day") }
         return ago(days / 30, "month")
+    }
+}
+
+/// A Time Machine disk as `--print-status` lists it.
+public struct ListedDisk: Equatable, Sendable {
+    /// Labelled as in the "Back up to" pop-up.
+    public var label: String
+    /// Whether BackMeUp backs up to it: the only disk, or the chosen one of several.
+    public var isBackupDisk: Bool
+
+    public init(label: String, isBackupDisk: Bool) {
+        self.label = label
+        self.isBackupDisk = isBackupDisk
     }
 }
 

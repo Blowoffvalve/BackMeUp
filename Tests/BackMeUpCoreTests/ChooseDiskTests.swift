@@ -578,6 +578,43 @@ struct ChooseDiskTests {
         #expect(harness.scheduler.settings.destinationID == "network-id")
     }
 
+    // MARK: Listing the disks (--print-status)
+
+    @Test func everyDiskIsListedEvenWhenThereIsOnlyOne() async {
+        let harness = harnessWithTwoDisks()
+        harness.system.destinationInfo = .configured(Self.usbDisk)
+
+        await harness.start()
+
+        #expect(harness.scheduler.disks == [
+            ListedDisk(label: "Old Disk (USB disk, not encrypted, never backed up)", isBackupDisk: true),
+        ])
+    }
+
+    @Test func theListSaysWhichOfSeveralDisksIsChosen() async {
+        let harness = harnessWithTwoDisks()
+        await harness.start()
+        #expect(harness.scheduler.disks.map(\.isBackupDisk) == [false, false])
+
+        await harness.scheduler.chooseDisk(id: "network-id")
+
+        #expect(harness.scheduler.disks == [
+            ListedDisk(label: "Old Disk (USB disk, not encrypted, never backed up)", isBackupDisk: false),
+            ListedDisk(label: "New Disk (Network disk, encrypted, never backed up)", isBackupDisk: true),
+        ])
+    }
+
+    @Test func withTheChosenDiskRemovedTheOneLeftIsNotTheBackupDiskUntilChosen() async {
+        let harness = harnessWithTwoDisks()
+        await harness.start()
+        await harness.scheduler.chooseDisk(id: "network-id")
+        harness.system.destinationInfo = .configured(Self.usbDisk)
+
+        await harness.advance(minutes: 1)
+
+        #expect(harness.scheduler.disks.map(\.isBackupDisk) == [false])
+    }
+
     @Test func withOneDiskThereIsNothingToChoose() async {
         let harness = SchedulerHarness()
         harness.system.destinationInfo = .configured(Self.networkDisk)

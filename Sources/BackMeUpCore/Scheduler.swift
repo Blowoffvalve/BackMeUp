@@ -216,6 +216,13 @@ public final class Scheduler {
             linkFailed: linkFailed
         ))
         self.checklist = checklist
+        let diskCheckPassed = checklist.item(.diskSetUp)?.state == .passed
+        disks = reading.disks.map { disk in
+            ListedDisk(
+                label: DiskChoice.label(disk, preferences: preferences, now: system.now),
+                isBackupDisk: diskCheckPassed && destination == .configured(disk)
+            )
+        }
         let problems = checklist.problems
         let shouldShow = if choiceCleared && problems.contains(.diskSetUp) {
             true
@@ -235,6 +242,10 @@ public final class Scheduler {
     /// The disks for the "Back up to" pop-up, when Time Machine has two or more. Empty otherwise,
     /// and before the first reading.
     public var diskChoices: [DiskChoice] { checklist?.item(.diskSetUp)?.diskChoices ?? [] }
+
+    /// Every Time Machine disk as of the last reading, even when there's only one, and which one
+    /// BackMeUp backs up to. For `--print-status`.
+    public private(set) var disks: [ListedDisk] = []
 
     /// "Back up to": saves the disk BackMeUp backs up to, by its Time Machine ID, and re-reads
     /// the checklist straight away.

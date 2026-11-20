@@ -14,9 +14,13 @@ MainActor.assumeIsolated {
             print(scheduler.networkLine)
             for item in scheduler.checklist?.items ?? [] {
                 print("Check \(item.check.rawValue) (\(item.state)): \(item.sentence)")
-                for choice in item.diskChoices {
-                    print("  Back up to: \(choice.label)\(choice.id == item.chosenDiskID ? " (chosen)" : "")")
-                }
+            }
+            // Every Time Machine disk, even just one, and the one BackMeUp backs up to.
+            for disk in scheduler.disks {
+                print("Disk: \(disk.label)\(disk.isBackupDisk ? " (chosen)" : "")")
+            }
+            if !scheduler.disks.isEmpty, !scheduler.disks.contains(where: \.isBackupDisk) {
+                print("No disk chosen")
             }
             // Also checks that Time Machine's preferences can be read and parsed.
             let preferences = await system.readPreferences()
