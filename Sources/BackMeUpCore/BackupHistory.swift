@@ -19,6 +19,9 @@ public enum SkipReason: String, Codable, Equatable, Sendable {
     /// A required checklist item (automatic backups off, a chosen network for a network disk, or
     /// one BackMeUp can't check) isn't done. A missing disk is `noDiskSetUp` instead.
     case setupNotFinished
+    /// Back Up Now while Time Machine was backing up to a disk other than the chosen one.
+    /// Scheduled backups wait for it instead.
+    case timeMachineBackingUpToAnotherDisk
 
     /// Whether this skip ends as soon as the checklist allows backups.
     public var isSetupReason: Bool {
@@ -39,6 +42,7 @@ public enum SkipReason: String, Codable, Equatable, Sendable {
         case .diskNotReachable: "network backup disk not reachable"
         case .onBattery: "on battery"
         case .setupNotFinished: "setup isn't finished"
+        case .timeMachineBackingUpToAnotherDisk: "Time Machine is backing up to another disk"
         }
     }
 
@@ -54,6 +58,7 @@ public enum SkipReason: String, Codable, Equatable, Sendable {
         case .diskNotReachable: "Time Machine hasn't been able to reach the network backup disk since \(since)."
         case .onBattery: "Your Mac has been on battery each time a backup was due since \(since)."
         case .setupNotFinished: "BackMeUp's setup checklist hasn't been finished. Open it from the menu."
+        case .timeMachineBackingUpToAnotherDisk: "Time Machine has been backing up to another disk each time you chose Back Up Now since \(since)."
         }
     }
 }

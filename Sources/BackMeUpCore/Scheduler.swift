@@ -59,6 +59,11 @@ public final class Scheduler {
         guard let chosen = diskChoice.chosenID, let runningTo else { return true }
         return runningTo == chosen
     }
+    /// Whether Time Machine is backing up to a disk other than the chosen one.
+    private var isTimeMachineRunningToAnotherDisk: Bool {
+        isTimeMachineRunning && !isTimeMachineRunningToChosenDisk
+    }
+
     /// Whether Time Machine's backup command is running for BackMeUp right now.
     private var backupCommandRunning = false
 
@@ -122,7 +127,7 @@ public final class Scheduler {
         askToChooseThisNetworkIfNeeded()
         updateSleepPrevention()
         if !isBackingUp, !isTimeMachineRunning,
-           system.now >= nextBackupDue || isBackOnAChosenNetwork || isSetupJustFinished {
+           system.now >= nextBackupDue || isBackOnAChosenNetwork || isSetupJustFinished || isOtherDiskBackupOver {
             startAttempt(byPerson: false)
         }
         checkAlerts()
@@ -306,6 +311,13 @@ public final class Scheduler {
         return system.now >= dueByInterval
     }
 
+    /// A Back Up Now skipped for another disk's backup doesn't hold back a backup due by the
+    /// backup interval: it starts as soon as that backup ends, rather than at the next retry.
+    private var isOtherDiskBackupOver: Bool {
+        guard skipReason == .timeMachineBackingUpToAnotherDisk, !isTimeMachineRunning else { return false }
+        return system.now >= dueByInterval
+    }
+
     // MARK: Networks
 
     /// Whether the menu should offer "Allow backups on this network": the current network is
@@ -470,6 +482,11 @@ public final class Scheduler {
         await readChecklist()
         if let checklist, let reason = checklist.skipReason {
             return BackupAttempt(started: started, finished: started, outcome: .skipped(reason))
+        }
+        // Scheduled backups wait for another disk's backup at the tick; Back Up Now is skipped.
+        timeMachineStatus = await system.readTimeMachineStatus()
+        if isTimeMachineRunningToAnotherDisk {
+            return BackupAttempt(started: started, finished: started, outcome: .skipped(.timeMachineBackingUpToAnotherDisk))
         }
         if !byPerson, !settings.allowBackupsOnBattery, system.powerSource == .battery {
             return BackupAttempt(started: started, finished: started, outcome: .skipped(.onBattery))
@@ -640,7 +657,7 @@ public final class Scheduler {
             history: history,
             nextBackupDue: nextBackupDue,
             isBackingUp: isBackingUp || isTimeMachineRunningToChosenDisk,
-            isBackingUpToAnotherDisk: !isBackingUp && isTimeMachineRunning && !isTimeMachineRunningToChosenDisk,
+            isBackingUpToAnotherDisk: !isBackingUp && isTimeMachineRunningToAnotherDisk,
             progress: progress,
             timeLeft: timeLeft,
             isWaitingForSetup: checklist?.allowsBackups == false,

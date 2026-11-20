@@ -203,6 +203,28 @@ struct ChooseDiskTests {
         #expect(harness.scheduler.history.attempts.map(\.outcome) == [.succeeded])
     }
 
+    /// Back Up Now while Time Machine backs up to another disk is skipped, not a failure, and
+    /// the backup still due starts once the other disk's backup ends.
+    @Test func backUpNowWhileAnotherDiskBacksUpIsSkipped() async {
+        let harness = harnessWithTwoDisks()
+        await harness.start()
+        await harness.scheduler.chooseDisk(id: "network-id")
+        harness.system.timeMachineStatus = .running(destinationID: "usb-id")
+        harness.at(minutes: 30) { $0.timeMachineStatus = .idle }
+
+        await harness.backUpNow()
+
+        #expect(harness.system.startedBackups.isEmpty)
+        #expect(harness.scheduler.skipReason == .timeMachineBackingUpToAnotherDisk)
+        #expect(harness.system.logLines.contains("Backup skipped: Time Machine is backing up to another disk"))
+        #expect(harness.statusLine == "Time Machine is backing up to another disk")
+
+        await harness.advance(minutes: 30)
+        #expect(harness.system.startedBackups == [harness.minutes(30)])
+        #expect(harness.system.startedBackupDestinations == ["network-id"])
+        #expect(!harness.scheduler.history.attempts.contains { if case .failed = $0.outcome { true } else { false } })
+    }
+
     /// With one disk nothing is chosen, so any backup Time Machine names is shown, as before.
     @Test func withOneDiskEveryRunningBackupShowsAsBefore() async {
         let harness = SchedulerHarness()
