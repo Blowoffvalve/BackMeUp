@@ -106,7 +106,8 @@ public struct Checklist: Equatable, Sendable {
         // Checks 1, 3 and 6 are about the chosen disk.
         let destination = inputs.destination.choosing(inputs.chosenDiskID)
         var diskSetUp = Self.diskSetUp(destination)
-        if case let .several(disks) = inputs.destination {
+        let disks = inputs.destination.disks
+        if disks.count > 1 {
             diskSetUp.diskChoices = disks.compactMap { DiskChoice($0, preferences: inputs.preferences) }
             if case .configured = destination { diskSetUp.chosenDiskID = inputs.chosenDiskID }
         }

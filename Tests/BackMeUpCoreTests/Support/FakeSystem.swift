@@ -259,14 +259,10 @@ final class FakeSystem: System {
     private var backingUpTo: String?
 
     private func writeResult(_ result: Int?, addingSnapshot: Bool) {
-        let id: String?
-        switch destinationInfo {
-        case let .configured(destination): id = backingUpTo ?? destination.id
-        case .several:
-            guard let backingUpTo else { return }
-            id = backingUpTo
-        case .notSetUp, .unknown: return
-        }
+        // Time Machine backs up to the --destination given, or the only disk.
+        let disks = destinationInfo.disks
+        guard backingUpTo != nil || disks.count == 1 else { return }
+        let id = backingUpTo ?? disks[0].id
         var preferences = preferences ?? TimeMachinePreferences(autoBackup: false, destinations: [])
         let entry = preferences.destination(id: id)
         let encryption = entry?.encryption ?? .encrypted

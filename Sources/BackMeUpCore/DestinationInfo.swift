@@ -71,6 +71,16 @@ extension DestinationInfo {
 }
 
 extension DestinationInfo {
+    /// Every disk read, in Time Machine's order: one when configured, none when not set up or
+    /// unknown.
+    public var disks: [Destination] {
+        switch self {
+        case let .configured(disk): [disk]
+        case let .several(disks): disks
+        case .notSetUp, .unknown: []
+        }
+    }
+
     /// The disk BackMeUp backs up to: with several disks, the one with this ID, if it's among
     /// them. Otherwise the reading as it is, so several disks with none chosen stay `.several`.
     public func choosing(_ id: String?) -> DestinationInfo {

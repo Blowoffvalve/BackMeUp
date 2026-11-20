@@ -224,15 +224,9 @@ public final class Scheduler {
     /// Clears the saved choice when that disk is no longer in Time Machine. Returns whether it did.
     /// With several disks left, check 1 then asks again; with one, BackMeUp uses it.
     private func forgetChosenDiskIfGone(_ reading: DestinationInfo) -> Bool {
-        guard let chosen = settings.destinationID else { return false }
-        let disks: [Destination]
-        switch reading {
-        case let .configured(disk): disks = [disk]
-        case let .several(several): disks = several
-        case .notSetUp: disks = []
         // Can't tell: keep the choice.
-        case .unknown: return false
-        }
+        guard let chosen = settings.destinationID, reading != .unknown else { return false }
+        let disks = reading.disks
         guard !disks.contains(where: { $0.id == chosen }) else { return false }
         settings.destinationID = nil
         system.saveSettings(settings)
@@ -422,28 +416,24 @@ public final class Scheduler {
         }
         // The disk the checklist was just read for: the chosen one, with several.
         let destination = self.destination ?? .unknown
-        let destinationID: String?
-        var diskKind: Destination.Kind?
         switch destination {
         case .several:
             // Several disks and none chosen: check 1 holds this back first.
             return BackupAttempt(started: started, finished: started, outcome: .skipped(.setupNotFinished))
         case .notSetUp:
             return BackupAttempt(started: started, finished: started, outcome: .skipped(.noDiskSetUp))
-        case let .configured(disk) where disk.kind == .local && disk.mountPoint == nil:
-            return BackupAttempt(started: started, finished: started, outcome: .skipped(.diskNotConnected))
-        case let .configured(disk):
-            destinationID = disk.id
-            diskKind = disk.kind
-        case .unknown:
-            // Can't tell which disk: let Time Machine try, and judge it by its result.
-            destinationID = nil
+        case .configured, .unknown:
+            break
         }
+        // nil when Time Machine's disks can't be read: let Time Machine try, and judge it by its result.
+        let disk = destination.disks.first
+        if let disk, disk.kind == .local, disk.mountPoint == nil {
+            return BackupAttempt(started: started, finished: started, outcome: .skipped(.diskNotConnected))
+        }
+        let destinationID = disk?.id
 
         // Network rules hold back network disks, and a disk we can't identify, but never a local one.
-        if case let .configured(disk) = destination, disk.kind == .local {
-            // No network rule.
-        } else {
+        if disk?.kind != .local {
             let network = await system.readNetwork()
             currentNetwork = network
             if let reason = networks.skipReason(on: network) {
@@ -463,7 +453,7 @@ public final class Scheduler {
             before: before,
             exitCode: exitCode,
             after: exitCode == nil ? nil : await system.readPreferences()?.destination(id: destinationID),
-            diskKind: diskKind,
+            diskKind: disk?.kind,
             isFirstBackup: history.lastSuccess == nil
         )
         return BackupAttempt(started: started, finished: system.now, outcome: verdict.outcome)
