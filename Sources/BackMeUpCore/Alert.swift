@@ -15,6 +15,10 @@ public struct Alert: Equatable, Sendable {
         /// The backup disk can be reached on a network that isn't chosen, perhaps after a new
         /// router: should backups be allowed on it? A Mac notification only.
         case chooseNetwork
+        /// Backups are paused until the user chooses a backup disk: the chosen disk left Time
+        /// Machine, or the first launch after an update found several disks and none chosen.
+        /// Sent once each time; the overdue alert covers a long pause.
+        case chooseDisk
     }
 
     public var kind: Kind

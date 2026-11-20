@@ -70,7 +70,7 @@ struct SchedulerTests {
 
     @Test func aBackupTimeMachineIsAlreadyRunningIsNotStartedAgain() async {
         let harness = harnessWithNetworkDisk()
-        harness.system.timeMachineStatus = .running
+        harness.system.timeMachineStatus = .running(destinationID: nil)
         harness.at(minutes: 30) { $0.timeMachineStatus = .idle }
 
         await harness.start()

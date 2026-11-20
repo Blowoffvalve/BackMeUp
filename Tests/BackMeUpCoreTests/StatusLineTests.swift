@@ -18,7 +18,7 @@ struct StatusLineTests {
     @Test func refreshingTheMenuNeverStartsABackup() async {
         let harness = SchedulerHarness()
         harness.system.destinationInfo = Self.networkDisk
-        harness.system.timeMachineStatus = .running
+        harness.system.timeMachineStatus = .running(destinationID: nil)
 
         await harness.scheduler.refreshStatus()
 
@@ -29,7 +29,7 @@ struct StatusLineTests {
     @Test func showsTimeMachineBackingUpByItself() async {
         let harness = SchedulerHarness()
         harness.system.destinationInfo = Self.networkDisk
-        harness.system.timeMachineStatus = .running
+        harness.system.timeMachineStatus = .running(destinationID: nil)
 
         await harness.start()
 

@@ -46,6 +46,24 @@ public final class Scheduler {
     /// The first progress seen in the running backup, to estimate the time left from.
     private var progressStart: (date: Date, fraction: Double)?
     private var backupTask: Task<Void, Never>?
+
+    /// Whether Time Machine is backing up, to any disk. No backup starts while it is.
+    private var isTimeMachineRunning: Bool {
+        if case .running = timeMachineStatus { true } else { false }
+    }
+
+    /// Whether Time Machine is backing up to the chosen disk, for the status line and progress.
+    /// With no disk chosen, or when Time Machine doesn't say which disk, any backup counts.
+    private var isTimeMachineRunningToChosenDisk: Bool {
+        guard case let .running(runningTo) = timeMachineStatus else { return false }
+        guard let chosen = diskChoice.chosenID, let runningTo else { return true }
+        return runningTo == chosen
+    }
+    /// Whether Time Machine is backing up to a disk other than the chosen one.
+    private var isTimeMachineRunningToAnotherDisk: Bool {
+        isTimeMachineRunning && !isTimeMachineRunningToChosenDisk
+    }
+
     /// Whether Time Machine's backup command is running for BackMeUp right now.
     private var backupCommandRunning = false
 
@@ -100,6 +118,7 @@ public final class Scheduler {
             registerLoginItem()
         }
         await readChecklist()
+        if isUpdated { askToChooseDiskAfterUpdateIfNeeded() }
         if !setupState.firstRunDone || isUpdated {
             setupState.firstRunDone = true
             setupState.lastLaunchedVersion = system.appVersion
@@ -107,8 +126,8 @@ public final class Scheduler {
         }
         askToChooseThisNetworkIfNeeded()
         updateSleepPrevention()
-        if !isBackingUp, timeMachineStatus != .running,
-           system.now >= nextBackupDue || isBackOnAChosenNetwork || isSetupJustFinished {
+        if !isBackingUp, !isTimeMachineRunning,
+           system.now >= nextBackupDue || isBackOnAChosenNetwork || isSetupJustFinished || isOtherDiskBackupOver {
             startAttempt(byPerson: false)
         }
         checkAlerts()
@@ -177,19 +196,37 @@ public final class Scheduler {
     /// Re-reads everything the checklist checks, and asks for the checklist to be shown if
     /// something needs the user.
     private func readChecklist() async {
-        let destination = await system.readDestinationInfo()
-        self.destination = destination
+        let reading = await system.readDestinationInfo()
+        let preferences = await system.readPreferences()
+        let notifications = await system.readNotificationPermission()
+        // The saved choice is read only after every await, so a disk chosen while this reading
+        // was in flight is the one it uses.
+        let choiceCleared = followDiskChoice(reading)
+        destination = reading.choosing(diskChoice.chosenID)
         let checklist = Checklist(ChecklistInputs(
-            destination: destination,
-            preferences: await system.readPreferences(),
+            destination: reading,
+            chosenDiskID: diskChoice.chosenID,
+            chosenDiskRemoved: diskChoice.chosenDiskRemoved,
+            newDiskAdded: diskChoice.newDiskAdded,
+            preferences: preferences,
+            now: system.now,
             networks: networks,
             loginItem: system.readLoginItemStatus(),
-            notifications: await system.readNotificationPermission(),
+            notifications: notifications,
             linkFailed: linkFailed
         ))
         self.checklist = checklist
+        let diskCheckPassed = checklist.item(.diskSetUp)?.state == .passed
+        disks = reading.disks.map { disk in
+            ListedDisk(
+                label: DiskChoice.label(disk, preferences: preferences, now: system.now),
+                isBackupDisk: diskCheckPassed && destination == .configured(disk)
+            )
+        }
         let problems = checklist.problems
-        let shouldShow = if let previousProblems {
+        let shouldShow = if choiceCleared && problems.contains(.diskSetUp) {
+            true
+        } else if let previousProblems {
             !problems.subtracting(previousProblems).isEmpty
         } else {
             !setupState.firstRunDone || problems.contains { $0.isRequired }
@@ -200,10 +237,95 @@ public final class Scheduler {
         if shouldShow { onShowChecklist?() }
     }
 
+    // MARK: Choosing the backup disk
+
+    /// The disks for the "Back up to" pop-up, when Time Machine has two or more. Empty otherwise,
+    /// and before the first reading.
+    public var diskChoices: [DiskChoice] { checklist?.item(.diskSetUp)?.diskChoices ?? [] }
+
+    /// Every Time Machine disk as of the last reading, even when there's only one, and which one
+    /// BackMeUp backs up to. For `--print-status`.
+    public private(set) var disks: [ListedDisk] = []
+
+    /// "Back up to": saves the disk BackMeUp backs up to, by its Time Machine ID, and re-reads
+    /// the checklist straight away.
+    public func chooseDisk(id: String?) async {
+        guard !isUninstalled, changeDiskChoice({ $0.choose(id) }) else { return }
+        system.log("Chose the backup disk")
+        await readChecklist()
+        describe()
+    }
+
+    /// Which disk BackMeUp backs up to, with the rules for changing it. Saved in the settings and
+    /// the setup state; `changeDiskChoice` keeps them in step.
+    private lazy var diskChoice = DiskChoiceState(settings: settings, setupState: setupState)
+
+    /// Applies a change to the disk choice and saves whatever it changed.
+    private func changeDiskChoice<Result>(_ change: (inout DiskChoiceState) -> Result) -> Result {
+        var state = diskChoice
+        let result = change(&state)
+        guard state != diskChoice else { return result }
+        diskChoice = state
+        var newSettings = settings, newSetupState = setupState
+        state.save(into: &newSettings, &newSetupState)
+        if newSettings != settings {
+            settings = newSettings
+            system.saveSettings(settings)
+        }
+        if newSetupState != setupState {
+            setupState = newSetupState
+            system.saveSetupState(setupState)
+        }
+        return result
+    }
+
+    /// Follows a new reading of Time Machine's disks: clears the choice when that disk left Time
+    /// Machine, sending the "choose a backup disk" alert once if there's a disk left to choose,
+    /// or keeps the disk BackMeUp used when a second one was added, with no alert. Returns
+    /// whether the choice was cleared. Backups wait until the user chooses again, however many
+    /// disks are left.
+    private func followDiskChoice(_ reading: DestinationInfo) -> Bool {
+        switch changeDiskChoice({ $0.update(for: reading) }) {
+        case .none:
+            return false
+        case let .chosenDiskRemoved(disksLeft):
+            system.log("The chosen backup disk is no longer in Time Machine\(disksLeft == 0 ? "" : "; asking which disk to back up to")")
+            if disksLeft > 0 {
+                sendChooseDiskAlert("The disk you chose is no longer in Time Machine, so backups are paused. Choose a disk in BackMeUp's checklist to start them again.")
+            }
+            return true
+        case .keptLastUsedDisk:
+            system.log("Time Machine has a new disk; still backing up to the disk BackMeUp used")
+            return false
+        }
+    }
+
+    /// At the first launch after an update, when Time Machine has several disks and none is
+    /// chosen, backups wait for check 1 and the "choose a backup disk" alert is sent. Only that
+    /// launch counts as the update, so it's sent once.
+    private func askToChooseDiskAfterUpdateIfNeeded() {
+        guard !diskChoice.chosenDiskRemoved, case .several = destination,
+              checklist?.item(.diskSetUp)?.needsDiskChoice == true else { return }
+        system.log("Several Time Machine disks and none chosen after an update; asking which disk to back up to")
+        sendChooseDiskAlert("Time Machine has more than one disk, so backups are paused until you choose which one BackMeUp backs up to. Choose it in BackMeUp's checklist.")
+    }
+
+    /// The "Choose a backup disk" alert, on every channel.
+    private func sendChooseDiskAlert(_ body: String) {
+        send(Alert(kind: .chooseDisk, title: "Choose a backup disk", body: body))
+    }
+
     /// A backup held back by an unfinished checklist starts as soon as the checklist allows it,
     /// rather than at the next retry, if it was due by the backup interval.
     private var isSetupJustFinished: Bool {
         guard let reason = skipReason, reason.isSetupReason, checklist?.allowsBackups == true else { return false }
+        return system.now >= dueByInterval
+    }
+
+    /// A Back Up Now skipped for another disk's backup doesn't hold back a backup due by the
+    /// backup interval: it starts as soon as that backup ends, rather than at the next retry.
+    private var isOtherDiskBackupOver: Bool {
+        guard skipReason == .timeMachineBackingUpToAnotherDisk, !isTimeMachineRunning else { return false }
         return system.now >= dueByInterval
     }
 
@@ -330,9 +452,12 @@ public final class Scheduler {
         await backupTask?.value
     }
 
-    /// Saves new settings, raised to the minimums.
+    /// Saves new settings, raised to the minimums. The chosen disk stays as it is: only
+    /// `chooseDisk(id:)` changes it.
     public func updateSettings(_ newSettings: BackupSettings) {
+        let destinationID = settings.destinationID
         settings = newSettings.validated
+        settings.destinationID = destinationID
         system.saveSettings(settings)
         describe()
     }
@@ -369,29 +494,34 @@ public final class Scheduler {
         if let checklist, let reason = checklist.skipReason {
             return BackupAttempt(started: started, finished: started, outcome: .skipped(reason))
         }
+        // Scheduled backups wait for another disk's backup at the tick; Back Up Now is skipped.
+        timeMachineStatus = await system.readTimeMachineStatus()
+        if isTimeMachineRunningToAnotherDisk {
+            return BackupAttempt(started: started, finished: started, outcome: .skipped(.timeMachineBackingUpToAnotherDisk))
+        }
         if !byPerson, !settings.allowBackupsOnBattery, system.powerSource == .battery {
             return BackupAttempt(started: started, finished: started, outcome: .skipped(.onBattery))
         }
-        let destination = await system.readDestinationInfo()
-        let destinationID: String?
-        var diskKind: Destination.Kind?
+        // The disk the checklist was just read for: the chosen one, with several.
+        let destination = self.destination ?? .unknown
         switch destination {
+        case .several:
+            // Several disks and none chosen: check 1 holds this back first.
+            return BackupAttempt(started: started, finished: started, outcome: .skipped(.setupNotFinished))
         case .notSetUp:
             return BackupAttempt(started: started, finished: started, outcome: .skipped(.noDiskSetUp))
-        case let .configured(disk) where disk.kind == .local && disk.mountPoint == nil:
-            return BackupAttempt(started: started, finished: started, outcome: .skipped(.diskNotConnected))
-        case let .configured(disk):
-            destinationID = disk.id
-            diskKind = disk.kind
-        case .unknown:
-            // Can't tell which disk: let Time Machine try, and judge it by its result.
-            destinationID = nil
+        case .configured, .unknown:
+            break
         }
+        // nil when Time Machine's disks can't be read: let Time Machine try, and judge it by its result.
+        let disk = destination.disks.first
+        if let disk, disk.kind == .local, disk.mountPoint == nil {
+            return BackupAttempt(started: started, finished: started, outcome: .skipped(.diskNotConnected))
+        }
+        let destinationID = disk?.id
 
         // Network rules hold back network disks, and a disk we can't identify, but never a local one.
-        if case let .configured(disk) = destination, disk.kind == .local {
-            // No network rule.
-        } else {
+        if disk?.kind != .local {
             let network = await system.readNetwork()
             currentNetwork = network
             if let reason = networks.skipReason(on: network) {
@@ -402,14 +532,16 @@ public final class Scheduler {
         let before = BackupVerdict.Before(await system.readPreferences(), destinationID: destinationID)
         backupCommandRunning = true
         updateSleepPrevention()
-        let exitCode = await system.startBackup()
+        let destinationArgument = diskChoice.destinationArgument(for: destinationID)
+        changeDiskChoice { $0.recordBackupStarting(to: destinationID) }
+        let exitCode = await system.startBackup(destinationID: destinationArgument)
         backupCommandRunning = false
         updateSleepPrevention()
         let verdict = BackupVerdict(
             before: before,
             exitCode: exitCode,
             after: exitCode == nil ? nil : await system.readPreferences()?.destination(id: destinationID),
-            diskKind: diskKind,
+            diskKind: disk?.kind,
             isFirstBackup: history.lastSuccess == nil
         )
         return BackupAttempt(started: started, finished: system.now, outcome: verdict.outcome)
@@ -454,7 +586,7 @@ public final class Scheduler {
         system.log("Alert sent: \(alert.title)")
         system.showNotification(alert)
         let tag = switch alert.kind {
-        case .failed, .overdue, .chooseNetwork: NtfyTag.warning
+        case .failed, .overdue, .chooseNetwork, .chooseDisk: NtfyTag.warning
         case .workingAgain: NtfyTag.success
         }
         ntfySender.send(title: alert.title, body: alert.body, tag: tag, with: ntfy)
@@ -504,7 +636,7 @@ public final class Scheduler {
     // MARK: Progress
 
     private func readProgress() async {
-        guard timeMachineStatus == .running else {
+        guard isTimeMachineRunningToChosenDisk else {
             progress = nil
             progressStart = nil
             return
@@ -535,7 +667,8 @@ public final class Scheduler {
         let text = MenuText(
             history: history,
             nextBackupDue: nextBackupDue,
-            isBackingUp: isBackingUp || timeMachineStatus == .running,
+            isBackingUp: isBackingUp || isTimeMachineRunningToChosenDisk,
+            isBackingUpToAnotherDisk: !isBackingUp && isTimeMachineRunningToAnotherDisk,
             progress: progress,
             timeLeft: timeLeft,
             isWaitingForSetup: checklist?.allowsBackups == false,

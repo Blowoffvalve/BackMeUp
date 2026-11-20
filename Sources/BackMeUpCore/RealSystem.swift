@@ -50,8 +50,10 @@ public final class RealSystem: System {
         return TimeMachinePreferences(defaultsOutput: result.stdout)
     }
 
-    public func startBackup() async -> Int32? {
-        await Command.run("/usr/bin/tmutil", ["startbackup", "--auto", "--block"])?.exitCode
+    public func startBackup(destinationID: String?) async -> Int32? {
+        // `--destination` keeps Time Machine from taking turns between disks.
+        let destination = destinationID.map { ["--destination", $0] } ?? []
+        return await Command.run("/usr/bin/tmutil", ["startbackup", "--auto", "--block"] + destination)?.exitCode
     }
 
     // MARK: Notifications

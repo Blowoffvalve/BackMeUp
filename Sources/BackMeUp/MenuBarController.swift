@@ -20,9 +20,11 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         keyEquivalent: ""
     )
     private lazy var settingsWindow = SettingsWindowController(scheduler: scheduler, updater: updater)
-    private lazy var checklistWindow = ChecklistWindowController(scheduler: scheduler) { [weak self] in
-        self?.openSettings()
-    }
+    private lazy var checklistWindow = ChecklistWindowController(
+        scheduler: scheduler,
+        openBackMeUpSettings: { [weak self] in self?.openSettings() },
+        refresh: { [weak self] in self?.refreshStatus() }
+    )
     private var backgroundTimer: Timer?
     private var openMenuTimer: Timer?
     private var isTicking = false
@@ -163,7 +165,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         networkItem.isHidden = scheduler.networkLine.isEmpty
         allowNetworkItem.isHidden = !scheduler.canAllowCurrentNetwork
         if checklistWindow.isVisible { checklistWindow.reload() }
-        if settingsWindow.isVisible { settingsWindow.reloadNetworks() }
+        if settingsWindow.isVisible {
+            settingsWindow.reloadNetworks()
+            settingsWindow.reloadDisks()
+        }
         drawIcon()
     }
 

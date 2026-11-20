@@ -47,6 +47,17 @@ public struct ChecklistItem: Equatable, Sendable {
     public var directions: String
     /// Whether to show `directions`: the Settings link failed to open, or the user has to do it by hand.
     public var showsDirections = false
+    /// Check 1 with two or more Time Machine disks: the disks for its "Back up to" pop-up, in
+    /// Time Machine's order. Empty otherwise.
+    public var diskChoices: [DiskChoice] = []
+    /// The disk chosen in the pop-up, or nil until the user chooses.
+    public var chosenDiskID: String?
+
+    /// Whether the pop-up shows a "Choose a disk…" placeholder: there are disks to choose from,
+    /// and the chosen one isn't among them.
+    public var needsDiskChoice: Bool {
+        !diskChoices.isEmpty && !diskChoices.contains { $0.id == chosenDiskID }
+    }
 
     /// Whether the check is done, or doesn't apply.
     public var isSatisfied: Bool { state == .passed || state == .notNeeded }
@@ -59,8 +70,18 @@ public struct ChecklistItem: Equatable, Sendable {
 
 /// What the checklist reads to decide each check.
 struct ChecklistInputs {
+    /// Time Machine's disks as read.
     var destination: DestinationInfo
+    /// The disk the user chose, when Time Machine has several.
+    var chosenDiskID: String?
+    /// Whether the chosen disk left Time Machine and the user hasn't chosen again.
+    var chosenDiskRemoved: Bool
+    /// Whether a second disk was added and the disk BackMeUp was using was kept as the choice,
+    /// until the user chooses again.
+    var newDiskAdded = false
     var preferences: TimeMachinePreferences?
+    /// The scheduler's clock, for how long ago each disk was last backed up to.
+    var now: Date
     var networks: NetworkSettings
     var loginItem: LoginItemStatus
     var notifications: NotificationPermission
@@ -80,7 +101,9 @@ public struct Checklist: Equatable, Sendable {
     /// Why backups are held back, or nil when checks 1, 2 and 6 pass.
     var skipReason: SkipReason? {
         if allowsBackups { return nil }
-        return item(.diskSetUp)?.state == .failed ? .noDiskSetUp : .setupNotFinished
+        // A disk to choose is setup still to finish, not a missing disk.
+        guard let disk = item(.diskSetUp), disk.state == .failed, disk.diskChoices.isEmpty else { return .setupNotFinished }
+        return .noDiskSetUp
     }
 
     /// The checks that aren't done (failing, a warning, or can't tell).
@@ -93,13 +116,25 @@ public struct Checklist: Equatable, Sendable {
     }
 
     init(_ inputs: ChecklistInputs) {
+        // Checks 1, 3 and 6 are about the chosen disk.
+        let destination = inputs.destination.choosing(inputs.chosenDiskID)
+        let disks = inputs.destination.disks
+        // The chosen disk left Time Machine: ask, even with one disk left.
+        let chosenDiskGone = inputs.chosenDiskRemoved && !disks.isEmpty
+        var diskSetUp = chosenDiskGone
+            ? Self.chosenDiskGone
+            : Self.diskSetUp(destination, newDiskAdded: inputs.newDiskAdded && disks.count > 1)
+        if disks.count > 1 || chosenDiskGone {
+            diskSetUp.diskChoices = disks.compactMap { DiskChoice($0, preferences: inputs.preferences, now: inputs.now) }
+            if case .configured = destination { diskSetUp.chosenDiskID = inputs.chosenDiskID }
+        }
         items = [
-            Self.diskSetUp(inputs.destination),
+            diskSetUp,
             Self.automaticBackupsOff(inputs.preferences),
-            Self.diskEncrypted(inputs.destination, inputs.preferences),
+            Self.diskEncrypted(destination, inputs.preferences),
             Self.opensAtLogin(inputs.loginItem),
             Self.notificationsAllowed(inputs.notifications),
-            Self.networkChosen(inputs.destination, inputs.networks),
+            Self.networkChosen(destination, inputs.networks),
         ]
         for index in items.indices where inputs.linkFailed.contains(items[index].check) {
             items[index].showsDirections = true
@@ -111,12 +146,38 @@ public struct Checklist: Equatable, Sendable {
     private static let timeMachine = ChecklistItem.Action.openSystemSettings(.timeMachine)
     private static let timeMachineDirections = "Open System Settings, then General > Time Machine."
 
-    private static func diskSetUp(_ destination: DestinationInfo) -> ChecklistItem {
-        let directions = "\(timeMachineDirections) Click Add Backup Disk and choose your backup disk."
+    private static let diskSetUpDirections = "\(timeMachineDirections) Click Add Backup Disk and choose your backup disk."
+
+    /// Check 1 when the chosen disk left Time Machine, until the user chooses again.
+    private static let chosenDiskGone = ChecklistItem(
+        check: .diskSetUp,
+        state: .failed,
+        sentence: "The disk you chose is no longer in Time Machine. Choose a disk to start backups again.",
+        action: timeMachine,
+        directions: diskSetUpDirections
+    )
+
+    private static func diskSetUp(_ destination: DestinationInfo, newDiskAdded: Bool) -> ChecklistItem {
+        let directions = diskSetUpDirections
         return switch destination {
-        case .configured:
-            ChecklistItem(check: .diskSetUp, state: .passed, sentence: "A Time Machine disk is set up.",
-                          action: timeMachine, directions: directions)
+        case let .configured(disk):
+            ChecklistItem(
+                check: .diskSetUp,
+                state: .passed,
+                sentence: newDiskAdded
+                    ? "Time Machine has a new disk. BackMeUp still backs up to \(disk.displayName)."
+                    : "A Time Machine disk is set up.",
+                action: timeMachine,
+                directions: directions
+            )
+        case .several:
+            ChecklistItem(
+                check: .diskSetUp,
+                state: .failed,
+                sentence: "Choose which disk BackMeUp backs up to.",
+                action: timeMachine,
+                directions: directions
+            )
         case .notSetUp:
             ChecklistItem(
                 check: .diskSetUp,

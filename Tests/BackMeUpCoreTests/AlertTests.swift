@@ -396,4 +396,112 @@ struct AlertTests {
 
         #expect(harness.notifications.count == 1)
     }
+
+    // MARK: Choose a backup disk
+
+    nonisolated static let usbDisk = Destination(kind: .local, id: "usb-id", name: "Old Disk", mountPoint: "/Volumes/Old Disk")
+    /// What's left after the chosen disk is removed: one disk, or two.
+    nonisolated static let disksLeft: [DestinationInfo] = [
+        .configured(usbDisk),
+        .several([usbDisk, Destination(kind: .network, id: "other-id")]),
+    ]
+    static let newDisk = Destination(kind: .network, id: "network-id", name: "New Disk")
+    static let chooseDiskAfterRemoval = Alert(
+        kind: .chooseDisk,
+        title: "Choose a backup disk",
+        body: "The disk you chose is no longer in Time Machine, so backups are paused. Choose a disk in BackMeUp's checklist to start them again."
+    )
+    static let chooseDiskAfterUpdate = Alert(
+        kind: .chooseDisk,
+        title: "Choose a backup disk",
+        body: "Time Machine has more than one disk, so backups are paused until you choose which one BackMeUp backs up to. Choose it in BackMeUp's checklist."
+    )
+
+    /// Two disks, with the network disk chosen, and ntfy set up.
+    func harnessWithChosenDisk() async -> SchedulerHarness {
+        let harness = SchedulerHarness()
+        harness.system.destinationInfo = .several([Self.usbDisk, Self.newDisk])
+        harness.scheduler.updateNtfy(NtfySettings(server: "https://ntfy.example", topic: "example-topic"))
+        await harness.start()
+        await harness.scheduler.chooseDisk(id: "network-id")
+        return harness
+    }
+
+    @Test(arguments: disksLeft)
+    func removingTheChosenDiskSendsAChooseDiskAlertOnce(left: DestinationInfo) async {
+        let harness = await harnessWithChosenDisk()
+        harness.system.destinationInfo = left
+
+        await harness.advance(minutes: 24 * 60)
+        await harness.restart()
+        await harness.advance(minutes: 60)
+
+        #expect(harness.notifications == [Self.chooseDiskAfterRemoval])
+        #expect(harness.system.ntfyMessages.map(\.title) == ["Choose a backup disk"])
+        #expect(harness.system.ntfyMessages.map(\.tags) == [[.warning]])
+        #expect(harness.system.logLines.contains("Alert sent: Choose a backup disk"))
+    }
+
+    @Test func choosingAgainAndLosingThatDiskTooAlertsAgain() async {
+        let harness = await harnessWithChosenDisk()
+        harness.system.destinationInfo = .several([Self.usbDisk, Destination(kind: .network, id: "other-id")])
+        await harness.advance(minutes: 1)
+        await harness.scheduler.chooseDisk(id: "other-id")
+
+        harness.system.destinationInfo = .configured(Self.usbDisk)
+        await harness.advance(minutes: 1)
+
+        #expect(harness.notifications == [Self.chooseDiskAfterRemoval, Self.chooseDiskAfterRemoval])
+    }
+
+    @Test func anUnreadableDiskListSendsNoChooseDiskAlert() async {
+        let harness = await harnessWithChosenDisk()
+        harness.system.destinationInfo = .unknown
+
+        await harness.advance(minutes: 60)
+
+        #expect(harness.scheduler.settings.destinationID == "network-id")
+        #expect(harness.notifications.isEmpty)
+        #expect(harness.system.ntfyMessages.isEmpty)
+    }
+
+    @Test func theFirstLaunchAfterAnUpdateWithSeveralDisksPausesAndAlertsOnce() async {
+        let harness = SchedulerHarness()
+        harness.system.destinationInfo = .several([Self.usbDisk, Self.newDisk])
+        harness.system.storedSetupState = SetupState(firstRunDone: true, lastLaunchedVersion: "1.0")
+        harness.system.appVersion = "2.0"
+        harness.scheduler.updateNtfy(NtfySettings(server: "https://ntfy.example", topic: "example-topic"))
+
+        await harness.start()
+        await harness.advance(minutes: 24 * 60)
+        await harness.restart()
+        await harness.advance(minutes: 60)
+
+        #expect(harness.notifications == [Self.chooseDiskAfterUpdate])
+        #expect(harness.system.ntfyMessages.map(\.title) == ["Choose a backup disk"])
+        #expect(harness.checklistShown >= 1)
+        #expect(harness.system.startedBackups.isEmpty)
+        #expect(harness.scheduler.skipReason == .setupNotFinished)
+        #expect(harness.system.logLines.contains("Several Time Machine disks and none chosen after an update; asking which disk to back up to"))
+    }
+
+    @Test func theFirstLaunchAfterAnUpdateWithOneDiskSendsNoChooseDiskAlert() async {
+        let harness = SchedulerHarness()
+        harness.system.destinationInfo = .configured(Self.newDisk)
+        harness.system.storedSetupState = SetupState(firstRunDone: true, lastLaunchedVersion: "1.0")
+        harness.system.appVersion = "2.0"
+
+        await harness.start()
+
+        #expect(harness.notifications.isEmpty)
+    }
+
+    @Test func theFirstLaunchAfterAnUpdateWithTheDiskAlreadyChosenSendsNoAlert() async {
+        let harness = await harnessWithChosenDisk()
+        harness.system.appVersion = "2.0"
+
+        await harness.restart()
+
+        #expect(harness.notifications.isEmpty)
+    }
 }

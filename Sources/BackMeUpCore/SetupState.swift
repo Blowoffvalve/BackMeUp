@@ -35,6 +35,16 @@ public struct SetupState: Codable, Equatable, Sendable {
     /// Router addresses of networks BackMeUp has already asked about allowing (after a new
     /// router, say), so it asks only once per network. nil in state saved before it existed.
     public var networksAskedAbout: [String]?
+    /// Time Machine's ID for the disk BackMeUp last backed up to while it was the only disk, so
+    /// that disk is kept when a second one is added. Not the user's choice. nil in state saved
+    /// before it existed, so the first launch after that update asks instead.
+    public var lastUsedDiskID: String?
+    /// Whether the chosen disk left Time Machine and the user hasn't chosen again. Backups wait,
+    /// even with one disk left, and it survives restarts. nil in state saved before it existed.
+    public var chosenDiskRemoved: Bool?
+    /// Whether a second disk was added and the disk BackMeUp was using was kept as the choice,
+    /// until the user chooses again. Check 1 says so. nil in state saved before it existed.
+    public var newDiskAdded: Bool?
 
     public init(firstRunDone: Bool = false, lastLaunchedVersion: String? = nil) {
         self.firstRunDone = firstRunDone

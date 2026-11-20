@@ -1,8 +1,8 @@
 import AppKit
 import BackMeUpCore
 
-/// The Settings window: how often to back up, how soon to retry, whether to back up on battery,
-/// and when to alert.
+/// The Settings window: which Time Machine disk to back up to (with two or more), how often to
+/// back up, how soon to retry, whether to back up on battery, and when to alert.
 ///
 /// Plain AppKit: SwiftUI's `@State` is a macro whose plugin the Command Line Tools don't ship.
 @MainActor
@@ -21,6 +21,8 @@ final class SettingsWindowController: NSObject {
     private let daysField = NSTextField()
     private let daysStepper = NSStepper()
     private lazy var networkSection = NetworkSettingsSection(scheduler: scheduler)
+    private lazy var diskPopUp = DiskPopUp(scheduler: scheduler)
+    private let diskNote = NSTextField.note("Time Machine has more than one disk. BackMeUp backs up to this one only.")
     private lazy var ntfySection = NtfySettingsSection(scheduler: scheduler)
     private lazy var updateSection = UpdateSettingsSection(updater: updater)
     private let batteryCheckbox = NSButton(checkboxWithTitle: "Allow backups on battery", target: nil, action: nil)
@@ -42,6 +44,7 @@ final class SettingsWindowController: NSObject {
         Task {
             await scheduler.refreshStatus()
             networkSection.reload()
+            reloadDisks()
         }
     }
 
@@ -51,6 +54,18 @@ final class SettingsWindowController: NSObject {
     /// the menu while the window is open.
     func reloadNetworks() {
         networkSection.reload()
+    }
+
+    /// Redraws the "Back up to" pop-up from the latest reading of Time Machine's disks.
+    func reloadDisks() {
+        let wasHidden = diskPopUp.view.isHidden
+        diskPopUp.reload(scheduler.checklist?.item(.diskSetUp))
+        diskNote.isHidden = diskPopUp.view.isHidden
+        // Fit the window as the pop-up appears or goes.
+        if wasHidden != diskPopUp.view.isHidden, let window, let content = window.contentView {
+            content.layoutSubtreeIfNeeded()
+            window.setContentSize(content.fittingSize)
+        }
     }
 
     // MARK: Building the window
@@ -71,6 +86,8 @@ final class SettingsWindowController: NSObject {
         let failuresRow = NSStackView(views: [label("Alert me after"), failuresField, failuresStepper, label("failed backups in a row")])
         let daysRow = NSStackView(views: [label("or after"), daysField, daysStepper, label("days without a backup")])
         let stack = NSStackView(views: [
+            diskPopUp.view,
+            diskNote,
             intervalRow,
             NSTextField.note("Counted from the last successful backup."),
             retryRow,
@@ -140,6 +157,7 @@ final class SettingsWindowController: NSObject {
         failuresStepper.integerValue = settings.alerts.failuresInARow
         daysField.integerValue = settings.alerts.daysWithoutBackup
         daysStepper.integerValue = settings.alerts.daysWithoutBackup
+        reloadDisks()
         networkSection.reload()
         ntfySection.reload()
         updateSection.reload()

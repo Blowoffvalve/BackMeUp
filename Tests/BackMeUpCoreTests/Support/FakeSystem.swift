@@ -78,6 +78,8 @@ final class FakeSystem: System {
 
     /// The simulated time each `tmutil startbackup` began.
     private(set) var startedBackups: [Date] = []
+    /// The `--destination` each `tmutil startbackup` was given, nil for none.
+    private(set) var startedBackupDestinations: [String?] = []
 
     /// Every Mac notification shown, with the simulated time it was shown. Nothing real is posted.
     private(set) var notifications: [(date: Date, alert: Alert)] = []
@@ -88,11 +90,12 @@ final class FakeSystem: System {
 
     /// Time Machine reports itself running while a backup started through the port runs.
     func readTimeMachineStatus() async -> TimeMachineStatus {
-        runningBackup != nil ? .running : timeMachineStatus
+        runningBackup != nil ? .running(destinationID: backingUpTo) : timeMachineStatus
     }
 
     func readBackupProgress() async -> BackupProgress? {
-        runningBackup != nil || timeMachineStatus == .running ? backupProgress : nil
+        guard case .running = await readTimeMachineStatus() else { return nil }
+        return backupProgress
     }
 
     func readDestinationInfo() async -> DestinationInfo {
@@ -100,14 +103,33 @@ final class FakeSystem: System {
     }
 
     func readPreferences() async -> TimeMachinePreferences? {
-        preferences
+        if pausesNextPreferencesRead {
+            pausesNextPreferencesRead = false
+            await withCheckedContinuation { pausedPreferencesRead = $0 }
+        }
+        return preferences
+    }
+
+    /// Whether the next read of Time Machine's preferences waits for `resumePreferencesRead()`,
+    /// so a test can act while a reading is in flight.
+    var pausesNextPreferencesRead = false
+    private var pausedPreferencesRead: CheckedContinuation<Void, Never>?
+    /// Whether a read of Time Machine's preferences is waiting for `resumePreferencesRead()`.
+    var isPreferencesReadPaused: Bool { pausedPreferencesRead != nil }
+
+    func resumePreferencesRead() {
+        pausedPreferencesRead?.resume()
+        pausedPreferencesRead = nil
     }
 
     /// Records the command, moves the clock on by the scripted duration (the real command blocks
-    /// until Time Machine finishes), and writes the scripted `RESULT` for the current destination.
-    func startBackup() async -> Int32? {
+    /// until Time Machine finishes), and writes the scripted `RESULT` for the destination it was
+    /// given, or the only one.
+    func startBackup(destinationID: String?) async -> Int32? {
         let backup = nextBackup
         startedBackups.append(now)
+        startedBackupDestinations.append(destinationID)
+        backingUpTo = destinationID
         guard let exitCode = backup.exitCode else { return nil }
         let end = now.addingTimeInterval(backup.minutes * 60)
         if backup.runsWhileTimePasses {
@@ -250,14 +272,20 @@ final class FakeSystem: System {
         storedNtfyServer = nil
     }
 
+    /// The `--destination` of the backup running or last run.
+    private var backingUpTo: String?
+
     private func writeResult(_ result: Int?, addingSnapshot: Bool) {
-        guard case let .configured(destination) = destinationInfo else { return }
+        // Time Machine backs up to the --destination given, or the only disk.
+        let disks = destinationInfo.disks
+        guard backingUpTo != nil || disks.count == 1 else { return }
+        let id = backingUpTo ?? disks[0].id
         var preferences = preferences ?? TimeMachinePreferences(autoBackup: false, destinations: [])
-        let entry = preferences.destination(id: destination.id)
+        let entry = preferences.destination(id: id)
         let encryption = entry?.encryption ?? .encrypted
         let latestSnapshot = addingSnapshot ? now : entry?.latestSnapshot
-        preferences.destinations.removeAll { $0.id == destination.id }
-        preferences.destinations.append(.init(id: destination.id, encryption: encryption, result: result, latestSnapshot: latestSnapshot))
+        preferences.destinations.removeAll { $0.id == id }
+        preferences.destinations.append(.init(id: id, encryption: encryption, result: result, latestSnapshot: latestSnapshot))
         self.preferences = preferences
     }
 }

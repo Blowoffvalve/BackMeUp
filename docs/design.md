@@ -23,17 +23,26 @@ The `Scheduler` is the core. Everything outside the app goes through the **Syste
 6. starts a backup if one is due and none is running, BackMeUp's or Time Machine's own
 7. checks alerts and updates the menu's lines
 
-**When a backup is due:** the backup interval (hours, days or weeks) after the last success, or straight away if there's never been one. After a failure, skip or pause, no sooner than the retry interval (minimum 15 minutes) after that attempt. Two shortcuts skip the retry wait when a backup is already due by the interval: the Mac comes back to a chosen network after a network skip, or the checklist starts allowing backups after a setup skip.
+**When a backup is due:** the backup interval (hours, days or weeks) after the last success, or straight away if there's never been one. After a failure, skip or pause, no sooner than the retry interval (minimum 15 minutes) after that attempt. Three shortcuts skip the retry wait when a backup is already due by the interval: the Mac comes back to a chosen network after a network skip, the checklist starts allowing backups after a setup skip, or another disk's backup ends after Back Up Now was skipped for it.
 
 **Running an attempt** (`runAttempt`), in order, each step able to end it as a skip:
 
 1. the checklist gate (see below), which applies to Back Up Now too
-2. the battery rule: on battery with battery backups off. Back Up Now ignores it
-3. the disk: no disk set up, or a local disk that isn't mounted
-4. the network rule, for network disks and for a disk whose kind can't be read, never for a local disk
-5. then `tmutil startbackup --auto --block`, judged by the success rule. If Time Machine's `RESULT` is 18 (it couldn't reach the network disk, for example just after login while a VPN is still starting) and there's no new snapshot, the attempt is a skip ("network backup disk not reachable"), not a failure
+2. Time Machine backing up to another disk than the chosen one (only Back Up Now gets this far; scheduled backups wait for it)
+3. the battery rule: on battery with battery backups off. Back Up Now ignores it
+4. the disk: no disk set up, or a local disk that isn't mounted
+5. the network rule, for network disks and for a disk whose kind can't be read, never for a local disk
+6. then `tmutil startbackup --auto --block` (with `--destination <ID>` for a disk chosen from several), judged by the success rule. If Time Machine's `RESULT` is 18 (it couldn't reach the network disk, for example just after login while a VPN is still starting) and there's no new snapshot, the attempt is a skip ("network backup disk not reachable"), not a failure
 
 Skips never count as failures. Each attempt is recorded in `BackupHistory` with its outcome: succeeded, failed (with a reason), skipped (with a reason) or paused. History keeps the last 200 attempts, plus a running tally since the last success (`SinceLastSuccess`) so alert counts stay right however many attempts are dropped.
+
+**Several Time Machine disks:** `DestinationInfo` lists every disk. With two or more and none chosen, BackMeUp always asks: check 1 fails with a "Back up to" pop-up (also in Settings) and attempts skip with "setup isn't finished". The chosen disk's `ID` is saved as `BackupSettings.destinationID`, and checks 1, 3 and 6, the network rule, the success rule and the `--destination` all follow it. `DiskChoiceState` owns the rules for changing the choice; the scheduler applies each change and saves it.
+
+- **A disk is added:** while there's one disk BackMeUp saves it as the last-used disk (`SetupState.lastUsedDiskID`) at each backup, so when a second disk appears, now or while BackMeUp was quit, that disk is kept as the choice, without an alert, and check 1 says "Time Machine has a new disk. BackMeUp still backs up to <name>." until the user chooses (saved, so it survives restarts). Versions before this never saved the last-used disk, so the first launch after that update with several disks and none chosen asks instead, with the alert below.
+- **The chosen disk is removed:** the choice is cleared and logged, backups pause and check 1 asks ("The disk you chose is no longer in Time Machine…"), even with one disk left; it never falls back to an earlier disk. `SetupState.chosenDiskRemoved` keeps this across restarts. Choosing the one disk left still passes `--destination`. With no disk left, check 1 says "Set up a Time Machine disk" instead and no alert is sent.
+- **Another disk's backup:** while Time Machine backs up to a disk other than the chosen one (started from its own menu), scheduled backups wait for it, its progress isn't shown and the menu says "Time Machine is backing up to another disk". Back Up Now during it is skipped with that reason; a backup due by the interval starts as soon as it ends.
+
+An unreadable `destinationinfo` changes nothing.
 
 **Sleep prevention:** an IOKit assertion stops idle sleep only while BackMeUp's backup command runs on AC power. A power-source watcher releases it the moment the Mac is unplugged, without waiting for the next tick.
 
@@ -43,7 +52,7 @@ Skips never count as failures. Each attempt is recorded in `BackupHistory` with 
 
 **The real adapter, `RealSystem`** (split across `RealSystem*.swift`):
 
-- Runs `/usr/bin/tmutil status -X`, `tmutil destinationinfo -X`, `tmutil startbackup --auto --block` and `/usr/bin/defaults read /Library/Preferences/com.apple.TimeMachine` as subprocesses. `defaults` can read that file without Full Disk Access; reading the plist directly can't.
+- Runs `/usr/bin/tmutil status -X`, `tmutil destinationinfo -X`, `tmutil startbackup --auto --block [--destination <ID>]` and `/usr/bin/defaults read /Library/Preferences/com.apple.TimeMachine` as subprocesses. `defaults` can read that file without Full Disk Access; reading the plist directly can't.
 - Network identity: the first default route on a physical interface from `netstat -rn -f inet` (VPN and tunnel interfaces such as `utun` never count), then the router's hardware address from SystemConfiguration's `State:/Network/Service/*/IPv4`, falling back to `arp -an`. Nothing is sent on the network. The Wi-Fi name comes from CoreWLAN, only with Location permission, and is used only as a label.
 - `UserNotifications` for Mac notifications, `SMAppService.mainApp` for the login item, `x-apple.systempreferences:` links for System Settings, `URLSession` for ntfy, the Keychain for the ntfy topic and token, and a plain-text log at `~/Library/Logs/BackMeUp/BackMeUp.log`.
 
@@ -83,6 +92,8 @@ After the first success, if ntfy is set up, a one-time "First backup finished" m
 - **Working again:** the first success after an alert sends "Backups are working again" and clears the problem.
 
 Every alert goes out as a Mac notification and, when a topic is set, an ntfy POST with `Title` and `Tags` headers and an optional bearer token. The menu bar icon shows a problem whenever the policy has one, whether or not an alert was just sent.
+
+**Choose a backup disk** (`.chooseDisk`): a Mac notification and ntfy (warning tag), sent once when the chosen disk is removed with at least one disk left, and once at the first launch after an update when Time Machine has several disks and none is chosen. Not when a disk is added, and not when the disks can't be read. It isn't repeated: if backups stay paused, the overdue alert covers it.
 
 One extra notification, Mac only: when a network disk is mounted on a network that isn't chosen and other networks are, BackMeUp asks once per network, "Back up on this network?" (for a new router).
 

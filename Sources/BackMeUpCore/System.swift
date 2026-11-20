@@ -23,9 +23,10 @@ public protocol System {
     /// Time Machine's preferences, or nil if they can't be read.
     func readPreferences() async -> TimeMachinePreferences?
 
-    /// Runs `tmutil startbackup --auto --block`: starts a backup and waits for it to finish.
-    /// Returns the exit code, or nil if the command couldn't be run.
-    func startBackup() async -> Int32?
+    /// Runs `tmutil startbackup --auto --block`, with `--destination <ID>` when one is given: starts
+    /// a backup and waits for it to finish. Returns the exit code, or nil if the command couldn't
+    /// be run.
+    func startBackup(destinationID: String?) async -> Int32?
 
     /// The network the Mac is on, identified by its router's hardware address: the default route
     /// on a physical interface (never a VPN), looked up in the ARP table. Sends nothing on the
