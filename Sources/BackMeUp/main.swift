@@ -14,6 +14,9 @@ MainActor.assumeIsolated {
             print(scheduler.networkLine)
             for item in scheduler.checklist?.items ?? [] {
                 print("Check \(item.check.rawValue) (\(item.state)): \(item.sentence)")
+                for choice in item.diskChoices {
+                    print("  Back up to: \(choice.label)\(choice.id == item.chosenDiskID ? " (chosen)" : "")")
+                }
             }
             // Also checks that Time Machine's preferences can be read and parsed.
             let preferences = await system.readPreferences()

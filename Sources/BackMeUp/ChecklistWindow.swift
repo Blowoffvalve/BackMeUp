@@ -18,6 +18,8 @@ final class ChecklistWindowController: NSObject, NSWindowDelegate {
     private var refreshTimer: Timer?
     /// What the window last drew, so that unchanged checks aren't rebuilt under the pointer.
     private var drawn: (checklist: Checklist?, tip: String?)?
+    /// Check 1's "Back up to" pop-up, when Time Machine has two or more disks.
+    private lazy var diskPopUp = DiskPopUp(scheduler: scheduler)
     private static let textWidth: CGFloat = 420
 
     init(scheduler: Scheduler, openBackMeUpSettings: @escaping () -> Void, refresh: @escaping () -> Void) {
@@ -108,6 +110,11 @@ final class ChecklistWindowController: NSObject, NSWindowDelegate {
         mark.setContentHuggingPriority(.required, for: .horizontal)
 
         var lines: [NSView] = [text(item.sentence)]
+        if !item.diskChoices.isEmpty {
+            // One pop-up kept across redraws, so the refresh doesn't reset it under the pointer.
+            diskPopUp.reload(choices: item.diskChoices, chosen: item.chosenDiskID)
+            lines.append(diskPopUp.view)
+        }
         if item.showsDirections {
             lines.append(text(item.directions, secondary: true))
         }

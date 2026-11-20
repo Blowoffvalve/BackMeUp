@@ -165,7 +165,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         networkItem.isHidden = scheduler.networkLine.isEmpty
         allowNetworkItem.isHidden = !scheduler.canAllowCurrentNetwork
         if checklistWindow.isVisible { checklistWindow.reload() }
-        if settingsWindow.isVisible { settingsWindow.reloadNetworks() }
+        if settingsWindow.isVisible {
+            settingsWindow.reloadNetworks()
+            settingsWindow.reloadDisks()
+        }
         drawIcon()
     }
 
