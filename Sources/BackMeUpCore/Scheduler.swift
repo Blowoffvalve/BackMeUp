@@ -633,6 +633,7 @@ public final class Scheduler {
             history: history,
             nextBackupDue: nextBackupDue,
             isBackingUp: isBackingUp || isTimeMachineRunningToChosenDisk,
+            isBackingUpToAnotherDisk: !isBackingUp && isTimeMachineRunning && !isTimeMachineRunningToChosenDisk,
             progress: progress,
             timeLeft: timeLeft,
             isWaitingForSetup: checklist?.allowsBackups == false,
