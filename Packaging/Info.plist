@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>BackMeUp</string>
+	<key>CFBundleExecutable</key>
+	<string>BackMeUp</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>io.github.blowoffvalve.BackMeUp</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>BackMeUp</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.utilities</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSLocationUsageDescription</key>
+	<string>BackMeUp reads your Wi-Fi network's name to label the networks you allow backups on. It never uses your location.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>BackMeUp reads your Wi-Fi network's name to label the networks you allow backups on. It never uses your location.</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>MIT licence</string>
+	<key>SUFeedURL</key>
+	<string>https://github.com/Blowoffvalve/BackMeUp/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>JICKKcSkEBYFxOm2vQ1cuLP0PIvOm048wwBO405M4BU=</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
+	<key>SUAllowsAutomaticUpdates</key>
+	<true/>
+	<key>SUAutomaticallyUpdate</key>
+	<false/>
+	<key>SUEnableSystemProfiling</key>
+	<false/>
+</dict>
+</plist>

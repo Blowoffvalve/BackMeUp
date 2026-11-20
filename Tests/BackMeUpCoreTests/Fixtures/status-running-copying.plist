@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>BackupPhase</key>
+	<string>Copying</string>
+	<key>ClientID</key>
+	<string>com.apple.backupd</string>
+	<key>DateOfStateChange</key>
+	<date>2026-01-01T12:00:00Z</date>
+	<key>DestinationID</key>
+	<string>00000000-0000-0000-0000-000000000001</string>
+	<key>DestinationMountPoint</key>
+	<string>/Volumes/Backups of Example Mac</string>
+	<key>FractionOfProgressBar</key>
+	<real>0.90000000000000002</real>
+	<key>Progress</key>
+	<dict>
+		<key>Percent</key>
+		<real>0.0066898739727356332</real>
+		<key>_raw_Percent</key>
+		<real>0.0066898739727356332</real>
+		<key>_raw_totalBytes</key>
+		<integer>251554357248</integer>
+		<key>bytes</key>
+		<integer>0</integer>
+		<key>files</key>
+		<integer>9</integer>
+		<key>totalBytes</key>
+		<integer>251554357248</integer>
+		<key>totalFiles</key>
+		<integer>2637685</integer>
+	</dict>
+	<key>Running</key>
+	<true/>
+	<key>attemptOptions</key>
+	<integer>257</integer>
+</dict>
+</plist>

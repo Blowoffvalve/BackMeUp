@@ -1,0 +1,46 @@
+{
+    AutoBackup = 0;
+    BackupAlias = {length = 246, bytes = 0x00000000 00000000 00000000 00000000 ... 00000000 00000000 };
+    Destinations =     (
+                {
+            AttemptDates =             (
+                "2026-01-01 23:32:30 +0000",
+                "2026-01-02 23:23:12 +0000",
+                "2026-01-03 01:23:06 +0000",
+                "2026-01-03 06:33:09 +0000"
+            );
+            BytesAvailable = 414972608142;
+            BytesUsed = 229534982144;
+            ConsistencyScanDate = "2026-01-01 05:55:32 +0000";
+            DestinationID = "00000000-0000-0000-0000-000000000001";
+            DestinationUUIDs =             (
+                "00000000-0000-0000-0000-000000000011"
+            );
+            DestinationVersion = 23;
+            DiskImageCreatedByBuild = 26B123;
+            DiskImageKeychainUUID = "00000000-0000-0000-0000-000000000012";
+            FilesystemTypeName = apfs;
+            HealthCheckDecision = 0;
+            InheritanceDecision = 0;
+            LastKnownEncryptionState = Encrypted;
+            LastKnownVolumeName = "TimeMachine";
+            NetworkURL = "smb://backup-user@backup-server/TimeMachine";
+            RESULT = 0;
+            ReferenceLocalSnapshotDate = "2026-01-03 01:30:33 +0000";
+            SMBConversionState = 0;
+            SnapshotDates =             (
+                "2026-01-01 02:55:32 +0000",
+                "2026-01-02 03:11:55 +0000",
+                "2026-01-03 05:46:51 +0000"
+            );
+            StableLocalSnapshotDate = "2026-01-03 06:39:01 +0000";
+        }
+    );
+    HostUUIDs =     (
+        "00000000-0000-0000-0000-000000000013"
+    );
+    LastDestinationID = "00000000-0000-0000-0000-000000000001";
+    LocalizedDiskImageVolumeName = "Backups of Example\U2019s Mac";
+    PreferencesVersion = 6;
+    RequiresACPower = 0;
+}
