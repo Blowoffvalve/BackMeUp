@@ -83,9 +83,15 @@ struct ChooseDiskTests {
         harness.system.resumePreferencesRead()
         await refresh.value
 
-        let check = harness.scheduler.checklist?.item(.diskSetUp)
+        let checklist = harness.scheduler.checklist
+        let check = checklist?.item(.diskSetUp)
         #expect(check?.state == .passed)
         #expect(check?.chosenDiskID == "network-id")
+        // The pop-up stays on the chosen disk rather than going back to "Choose a disk…".
+        #expect(check?.needsDiskChoice == false)
+        // Checks 3 and 6 are about the chosen disk too.
+        #expect(checklist?.item(.diskEncrypted)?.state == .passed)
+        #expect(checklist?.item(.networkChosen)?.state == .passed)
         #expect(harness.checklistShown == shownBefore)
     }
 
@@ -138,6 +144,24 @@ struct ChooseDiskTests {
         #expect(checklist?.item(.diskEncrypted)?.state == .warning)
         #expect(checklist?.item(.networkChosen)?.state == .notNeeded)
         #expect(harness.system.startedBackupDestinations == ["usb-id"])
+    }
+
+    @Test func switchingToTheEncryptedDiskClearsCheckThreesWarning() async {
+        let harness = harnessWithTwoDisks()
+        await harness.start()
+        await harness.scheduler.chooseDisk(id: "usb-id")
+        #expect(harness.scheduler.checklist?.item(.diskEncrypted)?.state == .warning)
+        let shownBefore = harness.checklistShown
+
+        await harness.scheduler.chooseDisk(id: "network-id")
+        #expect(harness.scheduler.checklist?.item(.diskEncrypted)?.state == .passed)
+
+        await harness.advance(minutes: 90)
+        #expect(harness.scheduler.checklist?.item(.diskEncrypted)?.state == .passed)
+        #expect(harness.checklistShown == shownBefore)
+
+        await harness.restart()
+        #expect(harness.scheduler.checklist?.item(.diskEncrypted)?.state == .passed)
     }
 
     @Test func theChoiceIsKeptAcrossRestartsAndUpdates() async {
