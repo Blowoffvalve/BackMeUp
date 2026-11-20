@@ -48,24 +48,25 @@ extension DestinationInfo {
             self = .unknown
             return
         }
-        var destinations: [Destination] = []
-        for entry in entries {
-            // A destination of a kind we don't know: can't tell, rather than guessing.
-            guard let kind = Destination.Kind(tmutilKind: entry.string("Kind")) else {
-                self = .unknown
-                return
-            }
-            destinations.append(Destination(
-                kind: kind,
-                id: entry.string("ID"),
-                name: entry.string("Name"),
-                mountPoint: entry.string("MountPoint")
-            ))
+        if entries.isEmpty {
+            self = .notSetUp
+            return
         }
-        switch destinations.count {
-        case 0: self = .notSetUp
-        case 1: self = .configured(destinations[0])
-        default: self = .several(destinations)
+        // A disk of a kind we don't know is left out, rather than guessed at.
+        var disks = entries.compactMap { entry in
+            Destination.Kind(tmutilKind: entry.string("Kind")).map {
+                Destination(kind: $0, id: entry.string("ID"), name: entry.string("Name"), mountPoint: entry.string("MountPoint"))
+            }
+        }
+        // With several, a disk without an ID can't be chosen (`--destination` needs one).
+        if disks.count > 1 {
+            disks.removeAll { $0.id == nil }
+        }
+        switch disks.count {
+        // No disk understood: can't tell.
+        case 0: self = .unknown
+        case 1: self = .configured(disks[0])
+        default: self = .several(disks)
         }
     }
 }
@@ -101,7 +102,8 @@ public struct DiskChoice: Equatable, Sendable {
         self.label = label
     }
 
-    /// nil for a disk without an ID, which can't be chosen.
+    /// nil for a disk without an ID, which can't be chosen. The parser leaves those out when
+    /// there are several.
     init?(_ disk: Destination, preferences: TimeMachinePreferences?) {
         guard let id = disk.id else { return nil }
         var details = [disk.kind == .network ? "Network disk" : "USB disk"]
