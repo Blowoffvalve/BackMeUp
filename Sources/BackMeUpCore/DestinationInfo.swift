@@ -10,20 +10,26 @@ public struct Destination: Equatable, Sendable {
     /// Time Machine's ID for the destination. Matches `DestinationID` in `tmutil status -X`
     /// and the destination entries in Time Machine's preferences.
     public var id: String?
+    /// The disk's name as Time Machine shows it (`Name`), for labelling it.
+    public var name: String?
     /// Where the disk is mounted, if it is. Network disks are usually not mounted between backups;
     /// Time Machine mounts them itself.
     public var mountPoint: String?
 
-    public init(kind: Kind, id: String?, mountPoint: String? = nil) {
+    public init(kind: Kind, id: String?, name: String? = nil, mountPoint: String? = nil) {
         self.kind = kind
         self.id = id
+        self.name = name
         self.mountPoint = mountPoint
     }
 }
 
-/// The Time Machine destination, from `tmutil destinationinfo -X`.
+/// The Time Machine destinations, from `tmutil destinationinfo -X`.
 public enum DestinationInfo: Equatable, Sendable {
+    /// One disk: BackMeUp backs up to it.
     case configured(Destination)
+    /// Two or more disks, in the order Time Machine lists them. The user chooses one.
+    case several([Destination])
     /// Time Machine has no backup disk.
     case notSetUp
     /// `tmutil` couldn't be run, or its output wasn't understood.
@@ -31,28 +37,71 @@ public enum DestinationInfo: Equatable, Sendable {
 }
 
 extension DestinationInfo {
-    /// Parses the plist printed by `tmutil destinationinfo -X`. BackMeUp uses the first
-    /// destination only (see the spec's Out of Scope).
+    /// Parses the plist printed by `tmutil destinationinfo -X`.
     public init(destinationInfoOutput: String) {
         // Without -X's plist, tmutil prints this sentence when no disk is set up.
         if destinationInfoOutput.contains("No destinations configured") {
             self = .notSetUp
             return
         }
-        guard let destinations = PlistDictionary(destinationInfoOutput)?.array("Destinations") else {
+        guard let entries = PlistDictionary(destinationInfoOutput)?.array("Destinations") else {
             self = .unknown
             return
         }
-        guard let first = destinations.first else {
-            self = .notSetUp
-            return
+        var destinations: [Destination] = []
+        for entry in entries {
+            // A destination of a kind we don't know: can't tell, rather than guessing.
+            guard let kind = Destination.Kind(tmutilKind: entry.string("Kind")) else {
+                self = .unknown
+                return
+            }
+            destinations.append(Destination(
+                kind: kind,
+                id: entry.string("ID"),
+                name: entry.string("Name"),
+                mountPoint: entry.string("MountPoint")
+            ))
         }
-        guard let kind = Destination.Kind(tmutilKind: first.string("Kind"))
-        else {
-            self = .unknown
-            return
+        switch destinations.count {
+        case 0: self = .notSetUp
+        case 1: self = .configured(destinations[0])
+        default: self = .several(destinations)
         }
-        self = .configured(Destination(kind: kind, id: first.string("ID"), mountPoint: first.string("MountPoint")))
+    }
+}
+
+extension DestinationInfo {
+    /// The disk BackMeUp backs up to: with several disks, the one with this ID, if it's among
+    /// them. Otherwise the reading as it is, so several disks with none chosen stay `.several`.
+    public func choosing(_ id: String?) -> DestinationInfo {
+        guard case let .several(disks) = self, let id, let disk = disks.first(where: { $0.id == id }) else { return self }
+        return .configured(disk)
+    }
+}
+
+/// A disk in the "Back up to" pop-up.
+public struct DiskChoice: Equatable, Sendable {
+    /// Time Machine's ID for the disk, saved as the choice.
+    public var id: String
+    /// Its name and kind, and whether it's encrypted when that's known: "Backups (Network disk, encrypted)".
+    public var label: String
+
+    public init(id: String, label: String) {
+        self.id = id
+        self.label = label
+    }
+
+    /// nil for a disk without an ID, which can't be chosen.
+    init?(_ disk: Destination, preferences: TimeMachinePreferences?) {
+        guard let id = disk.id else { return nil }
+        var details = [disk.kind == .network ? "Network disk" : "USB disk"]
+        switch preferences?.destinations.first(where: { $0.id == id })?.encryption {
+        case .encrypted?: details.append("encrypted")
+        case .notEncrypted?: details.append("not encrypted")
+        case .unknown?, nil: break
+        }
+        let name = disk.name.flatMap { $0.isEmpty ? nil : $0 } ?? "Unnamed disk"
+        self.init(id: id, label: "\(name) (\(details.joined(separator: ", ")))")
     }
 }
 

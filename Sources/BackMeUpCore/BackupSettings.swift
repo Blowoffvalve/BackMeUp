@@ -40,6 +40,10 @@ public struct BackupSettings: Codable, Equatable, Sendable {
     /// When to alert that backups have stopped.
     public var alerts: AlertSettings = .standard
 
+    /// With two or more Time Machine disks, the ID (`ID` in `tmutil destinationinfo -X`) of the one
+    /// BackMeUp backs up to. nil until the user chooses; unused with one disk.
+    public var destinationID: String?
+
     public init(backupInterval: BackupInterval, retryMinutes: Int, allowBackupsOnBattery: Bool = true) {
         self.backupInterval = backupInterval
         self.retryMinutes = retryMinutes
@@ -59,7 +63,7 @@ public struct BackupSettings: Codable, Equatable, Sendable {
 
 extension BackupSettings {
     private enum CodingKeys: String, CodingKey {
-        case backupInterval, retryMinutes, allowBackupsOnBattery, alerts
+        case backupInterval, retryMinutes, allowBackupsOnBattery, alerts, destinationID
     }
 
     /// Settings saved by an older version lack newer fields; those take their defaults.
@@ -71,5 +75,6 @@ extension BackupSettings {
             allowBackupsOnBattery: try container.decodeIfPresent(Bool.self, forKey: .allowBackupsOnBattery) ?? true
         )
         alerts = try container.decodeIfPresent(AlertSettings.self, forKey: .alerts) ?? .standard
+        destinationID = try container.decodeIfPresent(String.self, forKey: .destinationID)
     }
 }

@@ -47,6 +47,11 @@ public struct ChecklistItem: Equatable, Sendable {
     public var directions: String
     /// Whether to show `directions`: the Settings link failed to open, or the user has to do it by hand.
     public var showsDirections = false
+    /// Check 1 with two or more Time Machine disks: the disks for its "Back up to" pop-up, in
+    /// Time Machine's order. Empty otherwise.
+    public var diskChoices: [DiskChoice] = []
+    /// The disk chosen in the pop-up, or nil until the user chooses.
+    public var chosenDiskID: String?
 
     /// Whether the check is done, or doesn't apply.
     public var isSatisfied: Bool { state == .passed || state == .notNeeded }
@@ -59,7 +64,10 @@ public struct ChecklistItem: Equatable, Sendable {
 
 /// What the checklist reads to decide each check.
 struct ChecklistInputs {
+    /// Time Machine's disks as read.
     var destination: DestinationInfo
+    /// The disk the user chose, when Time Machine has several.
+    var chosenDestinationID: String?
     var preferences: TimeMachinePreferences?
     var networks: NetworkSettings
     var loginItem: LoginItemStatus
@@ -80,7 +88,9 @@ public struct Checklist: Equatable, Sendable {
     /// Why backups are held back, or nil when checks 1, 2 and 6 pass.
     var skipReason: SkipReason? {
         if allowsBackups { return nil }
-        return item(.diskSetUp)?.state == .failed ? .noDiskSetUp : .setupNotFinished
+        // A disk to choose is setup still to finish, not a missing disk.
+        guard let disk = item(.diskSetUp), disk.state == .failed, disk.diskChoices.isEmpty else { return .setupNotFinished }
+        return .noDiskSetUp
     }
 
     /// The checks that aren't done (failing, a warning, or can't tell).
@@ -93,13 +103,20 @@ public struct Checklist: Equatable, Sendable {
     }
 
     init(_ inputs: ChecklistInputs) {
+        // Checks 1, 3 and 6 are about the chosen disk.
+        let destination = inputs.destination.choosing(inputs.chosenDestinationID)
+        var diskSetUp = Self.diskSetUp(destination)
+        if case let .several(disks) = inputs.destination {
+            diskSetUp.diskChoices = disks.compactMap { DiskChoice($0, preferences: inputs.preferences) }
+            if case .configured = destination { diskSetUp.chosenDiskID = inputs.chosenDestinationID }
+        }
         items = [
-            Self.diskSetUp(inputs.destination),
+            diskSetUp,
             Self.automaticBackupsOff(inputs.preferences),
-            Self.diskEncrypted(inputs.destination, inputs.preferences),
+            Self.diskEncrypted(destination, inputs.preferences),
             Self.opensAtLogin(inputs.loginItem),
             Self.notificationsAllowed(inputs.notifications),
-            Self.networkChosen(inputs.destination, inputs.networks),
+            Self.networkChosen(destination, inputs.networks),
         ]
         for index in items.indices where inputs.linkFailed.contains(items[index].check) {
             items[index].showsDirections = true
@@ -116,6 +133,9 @@ public struct Checklist: Equatable, Sendable {
         return switch destination {
         case .configured:
             ChecklistItem(check: .diskSetUp, state: .passed, sentence: "A Time Machine disk is set up.",
+                          action: timeMachine, directions: directions)
+        case .several:
+            ChecklistItem(check: .diskSetUp, state: .failed, sentence: "Choose which disk BackMeUp backs up to.",
                           action: timeMachine, directions: directions)
         case .notSetUp:
             ChecklistItem(

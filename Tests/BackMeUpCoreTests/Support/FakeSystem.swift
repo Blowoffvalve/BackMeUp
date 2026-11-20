@@ -78,6 +78,8 @@ final class FakeSystem: System {
 
     /// The simulated time each `tmutil startbackup` began.
     private(set) var startedBackups: [Date] = []
+    /// The `--destination` each `tmutil startbackup` was given, nil for none.
+    private(set) var startedBackupDestinations: [String?] = []
 
     /// Every Mac notification shown, with the simulated time it was shown. Nothing real is posted.
     private(set) var notifications: [(date: Date, alert: Alert)] = []
@@ -104,10 +106,13 @@ final class FakeSystem: System {
     }
 
     /// Records the command, moves the clock on by the scripted duration (the real command blocks
-    /// until Time Machine finishes), and writes the scripted `RESULT` for the current destination.
-    func startBackup() async -> Int32? {
+    /// until Time Machine finishes), and writes the scripted `RESULT` for the destination it was
+    /// given, or the only one.
+    func startBackup(destinationID: String?) async -> Int32? {
         let backup = nextBackup
         startedBackups.append(now)
+        startedBackupDestinations.append(destinationID)
+        backingUpTo = destinationID
         guard let exitCode = backup.exitCode else { return nil }
         let end = now.addingTimeInterval(backup.minutes * 60)
         if backup.runsWhileTimePasses {
@@ -250,14 +255,24 @@ final class FakeSystem: System {
         storedNtfyServer = nil
     }
 
+    /// The `--destination` of the backup running or last run.
+    private var backingUpTo: String?
+
     private func writeResult(_ result: Int?, addingSnapshot: Bool) {
-        guard case let .configured(destination) = destinationInfo else { return }
+        let id: String?
+        switch destinationInfo {
+        case let .configured(destination): id = backingUpTo ?? destination.id
+        case .several:
+            guard let backingUpTo else { return }
+            id = backingUpTo
+        case .notSetUp, .unknown: return
+        }
         var preferences = preferences ?? TimeMachinePreferences(autoBackup: false, destinations: [])
-        let entry = preferences.destination(id: destination.id)
+        let entry = preferences.destination(id: id)
         let encryption = entry?.encryption ?? .encrypted
         let latestSnapshot = addingSnapshot ? now : entry?.latestSnapshot
-        preferences.destinations.removeAll { $0.id == destination.id }
-        preferences.destinations.append(.init(id: destination.id, encryption: encryption, result: result, latestSnapshot: latestSnapshot))
+        preferences.destinations.removeAll { $0.id == id }
+        preferences.destinations.append(.init(id: id, encryption: encryption, result: result, latestSnapshot: latestSnapshot))
         self.preferences = preferences
     }
 }

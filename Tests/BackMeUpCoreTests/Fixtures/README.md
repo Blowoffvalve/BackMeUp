@@ -15,6 +15,7 @@ In `defaults-timemachine-*.txt`, other UUIDs become `00000000-0000-0000-0000-000
 | `status-running-time-machine-shows-20.8.plist` | `tmutil status -X` | Real, macOS 27.2, a network backup in the Copying phase, captured while Time Machine's menu showed "20.8% done". `Percent` is 0.1197 and `FractionOfProgressBar` 0.9: Time Machine shows 10% + 0.9 × `Percent`. Destination, mount point and date replaced; `TimeRemaining` removed |
 | `destinationinfo-network.plist` | `tmutil destinationinfo -X` | Real, macOS 27.2, one SMB network destination |
 | `destinationinfo-local.plist` | `tmutil destinationinfo -X` | **Reconstructed**: one local (USB) disk. `Kind` `Local` and `MountPoint` are from memory of the format, not a capture |
+| `destinationinfo-two-disks.plist` | `tmutil destinationinfo -X` | **Reconstructed** from the two files above: an unencrypted USB disk listed first and an encrypted network disk second, as when someone keeps an old disk after adding a new one. `LastDestination` is on the network disk |
 | `destinationinfo-none.plist` | `tmutil destinationinfo -X` | **Reconstructed**: an empty `Destinations` array |
 | `destinationinfo-none.txt` | `tmutil destinationinfo` | **Reconstructed**: the sentence `tmutil` prints when no disk is set up. Which of the two "none" forms `-X` really gives hasn't been checked |
 | `defaults-timemachine-network.txt` | `defaults read /Library/Preferences/com.apple.TimeMachine` | Real, macOS 27.2, one encrypted SMB network destination, automatic backups off, `RESULT` 0. Old-style plist text, not XML |

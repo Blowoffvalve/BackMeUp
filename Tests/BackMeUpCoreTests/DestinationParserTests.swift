@@ -5,12 +5,20 @@ import BackMeUpCore
 struct DestinationParserTests {
     @Test func networkDisk() throws {
         let info = DestinationInfo(destinationInfoOutput: try fixture("destinationinfo-network.plist"))
-        #expect(info == .configured(Destination(kind: .network, id: "00000000-0000-0000-0000-000000000001")))
+        #expect(info == .configured(Destination(kind: .network, id: "00000000-0000-0000-0000-000000000001", name: "TimeMachine")))
     }
 
     @Test func localDisk() throws {
         let info = DestinationInfo(destinationInfoOutput: try fixture("destinationinfo-local.plist"))
-        #expect(info == .configured(Destination(kind: .local, id: "00000000-0000-0000-0000-000000000002", mountPoint: "/Volumes/Backup Disk")))
+        #expect(info == .configured(Destination(kind: .local, id: "00000000-0000-0000-0000-000000000002", name: "Backup Disk", mountPoint: "/Volumes/Backup Disk")))
+    }
+
+    @Test func twoDisksAreAllReturnedInTimeMachinesOrder() throws {
+        let info = DestinationInfo(destinationInfoOutput: try fixture("destinationinfo-two-disks.plist"))
+        #expect(info == .several([
+            Destination(kind: .local, id: "00000000-0000-0000-0000-000000000002", name: "Backup Disk", mountPoint: "/Volumes/Backup Disk"),
+            Destination(kind: .network, id: "00000000-0000-0000-0000-000000000001", name: "TimeMachine"),
+        ]))
     }
 
     @Test(arguments: ["destinationinfo-none.plist", "destinationinfo-none.txt"])

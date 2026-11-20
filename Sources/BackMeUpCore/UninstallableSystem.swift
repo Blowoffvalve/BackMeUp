@@ -59,9 +59,9 @@ final class UninstallableSystem: System {
 
     // MARK: Saving, starting and sending: dropped after Uninstall…
 
-    func startBackup() async -> Int32? {
+    func startBackup(destinationID: String?) async -> Int32? {
         guard !isUninstalled else { return nil }
-        return await base.startBackup()
+        return await base.startBackup(destinationID: destinationID)
     }
 
     func showNotification(_ alert: Alert) {
