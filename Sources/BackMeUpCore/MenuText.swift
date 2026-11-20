@@ -6,6 +6,8 @@ struct MenuText {
     var nextBackupDue: Date
     /// Whether a backup is running, BackMeUp's or one Time Machine started itself.
     var isBackingUp: Bool
+    /// Whether Time Machine is backing up to a disk other than the chosen one, started from its own menu.
+    var isBackingUpToAnotherDisk: Bool = false
     var progress: BackupProgress?
     /// The time left in the running backup, if it can be told.
     var timeLeft: TimeInterval?
@@ -18,6 +20,7 @@ struct MenuText {
     /// The first line: the last backup, or what went wrong with it.
     var statusLine: String {
         if isBackingUp { return progressLine }
+        if isBackingUpToAnotherDisk { return "Time Machine is backing up to another disk" }
         if isWaitingForSetup { return "Finish setting up: see the checklist" }
         switch history.attempts.last?.outcome {
         case let .failed(reason)?:
@@ -35,7 +38,7 @@ struct MenuText {
 
     /// The second line: when the next backup is planned. Empty while backing up.
     var nextBackupLine: String {
-        if isBackingUp { return "" }
+        if isBackingUp || isBackingUpToAnotherDisk { return "" }
         if isWaitingForSetup { return "Backups start once setup is finished" }
         let label = switch history.attempts.last?.outcome ?? .succeeded {
         case .succeeded: "Next backup"

@@ -101,11 +101,11 @@ struct ChooseDiskTests {
         ("network-id", "First backup: 50.0%, about 2 minutes left"),
         // Time Machine doesn't say which disk: shown, as with one disk.
         (nil, "First backup: 50.0%, about 2 minutes left"),
-        ("usb-id", "Backup skipped: setup isn't finished"),
+        // Another disk: said so, with none of its progress.
+        ("usb-id", "Time Machine is backing up to another disk"),
     ]
 
-    /// Time Machine backing up by itself: only a backup to the chosen disk shows. The backup held
-    /// back before the choice is still the latest news otherwise.
+    /// Time Machine backing up by itself: only a backup to the chosen disk shows its progress.
     @Test(arguments: runningBackups)
     func statusAndProgressFollowTheChosenDisk(runningTo: String?, expected: String) async {
         let harness = harnessWithTwoDisks()
@@ -117,6 +117,64 @@ struct ChooseDiskTests {
         await harness.scheduler.refreshStatus()
 
         #expect(harness.statusLine == expected)
+    }
+
+    /// Someone starts a backup to the old disk from Time Machine's own menu. BackMeUp waits for it
+    /// without counting it as its own, then backs up to the chosen disk once it's over.
+    @Test func aBackupToAnotherDiskIsWaitedForAndNotCounted() async {
+        let harness = harnessWithTwoDisks()
+        harness.system.timeMachineStatus = .running(destinationID: "usb-id")
+        harness.system.backupProgress = BackupProgress(fraction: 0.5, timeRemaining: 120)
+        harness.at(minutes: 30) { $0.timeMachineStatus = .idle }
+        await harness.start()
+
+        await harness.scheduler.chooseDisk(id: "network-id")
+        await harness.advance(minutes: 29)
+
+        #expect(harness.system.startedBackups.isEmpty)
+        #expect(harness.scheduler.history.attempts.isEmpty)
+        #expect(harness.statusLine == "Time Machine is backing up to another disk")
+        #expect(harness.nextBackupLine == "")
+
+        // It ends: the backup due since the choice starts, to the chosen disk.
+        await harness.advance(minutes: 1)
+        #expect(harness.system.startedBackups == [harness.minutes(30)])
+        #expect(harness.system.startedBackupDestinations == ["network-id"])
+        #expect(harness.scheduler.history.attempts.map(\.outcome) == [.succeeded])
+    }
+
+    /// With one disk nothing is chosen, so any backup Time Machine names is shown, as before.
+    @Test func withOneDiskEveryRunningBackupShowsAsBefore() async {
+        let harness = SchedulerHarness()
+        harness.system.timeMachineStatus = .running(destinationID: "some-other-id")
+        harness.system.backupProgress = BackupProgress(fraction: 0.5, timeRemaining: 120)
+
+        await harness.start()
+
+        #expect(harness.statusLine == "First backup: 50.0%, about 2 minutes left")
+        #expect(harness.system.startedBackups.isEmpty)
+    }
+
+    /// A backup that falls due while another disk backs up starts as soon as that one ends.
+    @Test func aBackupDueWhileAnotherDiskBacksUpStartsWhenItEnds() async {
+        let harness = harnessWithTwoDisks()
+        await harness.start()
+        await harness.scheduler.chooseDisk(id: "network-id")
+        await harness.advance(minutes: 1)
+        #expect(harness.system.startedBackups == [harness.minutes(1)])
+
+        // A day later the next backup is due, but Time Machine is busy with the old disk.
+        harness.at(minutes: 23 * 60) { $0.timeMachineStatus = .running(destinationID: "usb-id") }
+        harness.at(minutes: 25 * 60) { $0.timeMachineStatus = .idle }
+        // The first backup ended at minute 21; stop a minute before the other disk's backup ends.
+        await harness.advance(minutes: 25 * 60 - 22)
+        #expect(harness.system.startedBackups == [harness.minutes(1)])
+        #expect(harness.statusLine == "Time Machine is backing up to another disk")
+
+        await harness.advance(minutes: 1)
+        #expect(harness.system.startedBackups == [harness.minutes(1), harness.minutes(25 * 60)])
+        // After the skip from before the choice, only BackMeUp's own two backups.
+        #expect(harness.scheduler.history.attempts.map(\.outcome) == [.skipped(.setupNotFinished), .succeeded, .succeeded])
     }
 
     @Test func theChosenNetworkDiskFollowsTheNetworkRule() async {
