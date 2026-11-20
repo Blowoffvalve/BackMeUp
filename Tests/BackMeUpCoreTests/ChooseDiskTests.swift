@@ -195,6 +195,20 @@ struct ChooseDiskTests {
         #expect(harness.system.logLines.contains("The chosen backup disk is no longer in Time Machine; asking which disk to back up to"))
     }
 
+    @Test func checkOneSaysTheChosenDiskWasRemovedUntilTheUserChoosesAgain() async {
+        let harness = harnessWithTwoDisks()
+        await harness.start()
+        await harness.scheduler.chooseDisk(id: "network-id")
+        harness.system.destinationInfo = .several([Self.usbDisk, Self.otherDisk])
+
+        await harness.advance(minutes: 60)
+        #expect(harness.scheduler.checklist?.item(.diskSetUp)?.sentence
+            == "The disk you chose is no longer in Time Machine. Choose which disk BackMeUp backs up to.")
+
+        await harness.scheduler.chooseDisk(id: "other-id")
+        #expect(harness.scheduler.checklist?.item(.diskSetUp)?.sentence == "A Time Machine disk is set up.")
+    }
+
     @Test func removingTheChosenDiskWithOneLeftUsesThatDisk() async {
         let harness = harnessWithTwoDisks()
         await harness.start()

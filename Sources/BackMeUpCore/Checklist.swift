@@ -68,6 +68,8 @@ struct ChecklistInputs {
     var destination: DestinationInfo
     /// The disk the user chose, when Time Machine has several.
     var chosenDiskID: String?
+    /// Whether the chosen disk left Time Machine and the user hasn't chosen again.
+    var chosenDiskRemoved: Bool
     var preferences: TimeMachinePreferences?
     var networks: NetworkSettings
     var loginItem: LoginItemStatus
@@ -105,7 +107,7 @@ public struct Checklist: Equatable, Sendable {
     init(_ inputs: ChecklistInputs) {
         // Checks 1, 3 and 6 are about the chosen disk.
         let destination = inputs.destination.choosing(inputs.chosenDiskID)
-        var diskSetUp = Self.diskSetUp(destination)
+        var diskSetUp = Self.diskSetUp(destination, chosenDiskRemoved: inputs.chosenDiskRemoved)
         let disks = inputs.destination.disks
         if disks.count > 1 {
             diskSetUp.diskChoices = disks.compactMap { DiskChoice($0, preferences: inputs.preferences) }
@@ -129,15 +131,21 @@ public struct Checklist: Equatable, Sendable {
     private static let timeMachine = ChecklistItem.Action.openSystemSettings(.timeMachine)
     private static let timeMachineDirections = "Open System Settings, then General > Time Machine."
 
-    private static func diskSetUp(_ destination: DestinationInfo) -> ChecklistItem {
+    private static func diskSetUp(_ destination: DestinationInfo, chosenDiskRemoved: Bool) -> ChecklistItem {
         let directions = "\(timeMachineDirections) Click Add Backup Disk and choose your backup disk."
         return switch destination {
         case .configured:
             ChecklistItem(check: .diskSetUp, state: .passed, sentence: "A Time Machine disk is set up.",
                           action: timeMachine, directions: directions)
         case .several:
-            ChecklistItem(check: .diskSetUp, state: .failed, sentence: "Choose which disk BackMeUp backs up to.",
-                          action: timeMachine, directions: directions)
+            ChecklistItem(
+                check: .diskSetUp,
+                state: .failed,
+                sentence: (chosenDiskRemoved ? "The disk you chose is no longer in Time Machine. " : "")
+                    + "Choose which disk BackMeUp backs up to.",
+                action: timeMachine,
+                directions: directions
+            )
         case .notSetUp:
             ChecklistItem(
                 check: .diskSetUp,

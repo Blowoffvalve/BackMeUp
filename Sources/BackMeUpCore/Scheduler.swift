@@ -200,6 +200,7 @@ public final class Scheduler {
         let checklist = Checklist(ChecklistInputs(
             destination: reading,
             chosenDiskID: settings.destinationID,
+            chosenDiskRemoved: chosenDiskRemoved,
             preferences: preferences,
             networks: networks,
             loginItem: system.readLoginItemStatus(),
@@ -232,11 +233,16 @@ public final class Scheduler {
     public func chooseDisk(id: String?) async {
         guard !isUninstalled, id != settings.destinationID else { return }
         settings.destinationID = id
+        chosenDiskRemoved = false
         system.saveSettings(settings)
         system.log("Chose the backup disk")
         await readChecklist()
         describe()
     }
+
+    /// Whether the saved choice was cleared because that disk left Time Machine, until the user
+    /// chooses again. Check 1 says so.
+    private var chosenDiskRemoved = false
 
     /// Clears the saved choice when that disk is no longer in Time Machine. Returns whether it did.
     /// With several disks left, check 1 then asks again; with one, BackMeUp uses it.
@@ -246,6 +252,7 @@ public final class Scheduler {
         let disks = reading.disks
         guard !disks.contains(where: { $0.id == chosen }) else { return false }
         settings.destinationID = nil
+        chosenDiskRemoved = true
         system.saveSettings(settings)
         let next = switch disks.count {
         case 0: ""
