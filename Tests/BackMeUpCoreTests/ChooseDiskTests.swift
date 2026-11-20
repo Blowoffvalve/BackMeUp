@@ -35,8 +35,8 @@ struct ChooseDiskTests {
         #expect(check?.state == .failed)
         #expect(check?.sentence == "Choose which disk BackMeUp backs up to.")
         #expect(check?.diskChoices == [
-            DiskChoice(id: "usb-id", label: "Old Disk (USB disk, not encrypted)"),
-            DiskChoice(id: "network-id", label: "New Disk (Network disk, encrypted)"),
+            DiskChoice(id: "usb-id", label: "Old Disk (USB disk, not encrypted, never backed up)"),
+            DiskChoice(id: "network-id", label: "New Disk (Network disk, encrypted, never backed up)"),
         ])
         #expect(check?.chosenDiskID == nil)
         #expect(check?.needsDiskChoice == true)
@@ -44,6 +44,66 @@ struct ChooseDiskTests {
         #expect(harness.scheduler.skipReason == .setupNotFinished)
         #expect(harness.statusLine == "Finish setting up: see the checklist")
         #expect(harness.checklistShown == 1)
+    }
+
+    // MARK: Labels
+
+    /// Each label says when that disk was last backed up to, from its latest snapshot, so the
+    /// disk someone stopped using stands out.
+    @Test func eachDiskSaysWhenItWasLastBackedUpTo() async {
+        let harness = SchedulerHarness()
+        let unnamedDisk = Destination(kind: .local, id: "unnamed-id", name: nil)
+        harness.system.destinationInfo = .several([Self.usbDisk, Self.networkDisk, unnamedDisk])
+        harness.system.preferences = TimeMachinePreferences(autoBackup: false, destinations: [
+            .init(id: "usb-id", encryption: .notEncrypted, result: 0,
+                  latestSnapshot: harness.minutes(-4 * 30 * 24 * 60 - 90)),
+            .init(id: "network-id", encryption: .encrypted, result: 0,
+                  latestSnapshot: harness.minutes(-3 * 24 * 60 - 5)),
+            .init(id: "unnamed-id", result: nil),
+        ])
+
+        await harness.start()
+
+        #expect(harness.scheduler.diskChoices == [
+            DiskChoice(id: "usb-id", label: "Old Disk (USB disk, not encrypted, last backup 4 months ago)"),
+            DiskChoice(id: "network-id", label: "New Disk (Network disk, encrypted, last backup 3 days ago)"),
+            DiskChoice(id: "unnamed-id", label: "Unnamed disk (USB disk, never backed up)"),
+        ])
+    }
+
+    nonisolated static let ages: [(Double, String)] = [
+        (0.5, "last backup less than a minute ago"),
+        (1, "last backup 1 minute ago"),
+        (45, "last backup 45 minutes ago"),
+        (60, "last backup 1 hour ago"),
+        (5 * 60 + 59, "last backup 5 hours ago"),
+        (24 * 60, "last backup 1 day ago"),
+        (59 * 24 * 60, "last backup 59 days ago"),
+        (60 * 24 * 60, "last backup 2 months ago"),
+        (400 * 24 * 60, "last backup 13 months ago"),
+    ]
+
+    /// Ages are measured on the scheduler's clock, not the wall clock.
+    @Test(arguments: ages)
+    func agesReadNaturally(minutesAgo: Double, expected: String) async {
+        let harness = harnessWithTwoDisks()
+        harness.system.preferences?.destinations[1].latestSnapshot = harness.minutes(-minutesAgo)
+
+        await harness.start()
+
+        #expect(harness.scheduler.diskChoices.last?.label == "New Disk (Network disk, encrypted, \(expected))")
+    }
+
+    /// A label ages as the scheduler's clock moves on and the checklist is read again.
+    @Test func aLabelAgesAsTimePasses() async {
+        let harness = harnessWithTwoDisks()
+        harness.system.preferences?.destinations[1].latestSnapshot = harness.minutes(-50)
+        await harness.start()
+
+        await harness.advance(minutes: 20)
+        await harness.scheduler.refreshStatus()
+
+        #expect(harness.scheduler.diskChoices.last?.label == "New Disk (Network disk, encrypted, last backup 1 hour ago)")
     }
 
     // MARK: Choosing

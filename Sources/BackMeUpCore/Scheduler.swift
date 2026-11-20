@@ -202,6 +202,7 @@ public final class Scheduler {
             chosenDiskID: settings.destinationID,
             chosenDiskRemoved: chosenDiskRemoved,
             preferences: preferences,
+            now: system.now,
             networks: networks,
             loginItem: system.readLoginItemStatus(),
             notifications: notifications,
