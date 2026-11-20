@@ -275,11 +275,7 @@ public final class Scheduler {
         case let .chosenDiskRemoved(disksLeft):
             system.log("The chosen backup disk is no longer in Time Machine\(disksLeft == 0 ? "" : "; asking which disk to back up to")")
             if disksLeft > 0 {
-                send(Alert(
-                    kind: .chooseDisk,
-                    title: "Choose a backup disk",
-                    body: "The disk you chose is no longer in Time Machine, so backups are paused. Choose a disk in BackMeUp's checklist to start them again."
-                ))
+                sendChooseDiskAlert("The disk you chose is no longer in Time Machine, so backups are paused. Choose a disk in BackMeUp's checklist to start them again.")
             }
             return true
         case .keptLastUsedDisk:
@@ -295,11 +291,12 @@ public final class Scheduler {
         guard !diskChoice.chosenDiskRemoved, case .several = destination,
               checklist?.item(.diskSetUp)?.needsDiskChoice == true else { return }
         system.log("Several Time Machine disks and none chosen after an update; asking which disk to back up to")
-        send(Alert(
-            kind: .chooseDisk,
-            title: "Choose a backup disk",
-            body: "Time Machine has more than one disk, so backups are paused until you choose which one BackMeUp backs up to. Choose it in BackMeUp's checklist."
-        ))
+        sendChooseDiskAlert("Time Machine has more than one disk, so backups are paused until you choose which one BackMeUp backs up to. Choose it in BackMeUp's checklist.")
+    }
+
+    /// The "Choose a backup disk" alert, on every channel.
+    private func sendChooseDiskAlert(_ body: String) {
+        send(Alert(kind: .chooseDisk, title: "Choose a backup disk", body: body))
     }
 
     /// A backup held back by an unfinished checklist starts as soon as the checklist allows it,
