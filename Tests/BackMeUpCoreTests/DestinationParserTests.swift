@@ -21,7 +21,6 @@ struct DestinationParserTests {
         ]))
     }
 
-    static let usbDisk = Destination(kind: .local, id: "00000000-0000-0000-0000-000000000002", name: "Backup Disk", mountPoint: "/Volumes/Backup Disk")
     static let networkDisk = Destination(kind: .network, id: "00000000-0000-0000-0000-000000000001", name: "TimeMachine")
     static let usbDiskID = "<key>ID</key>\n\t\t\t<string>00000000-0000-0000-0000-000000000002</string>"
     static let networkDiskID = "<key>ID</key>\n\t\t\t<string>00000000-0000-0000-0000-000000000001</string>"
