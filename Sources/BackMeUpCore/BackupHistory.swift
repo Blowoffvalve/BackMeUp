@@ -76,6 +76,11 @@ public enum FailureReason: Codable, Equatable, Sendable {
     /// Machine kept a stale record of its mount; restarting the Mac fixed it. `isNetworkDisk` is
     /// false for a local disk or one BackMeUp couldn't identify.
     case diskUnreachable(isNetworkDisk: Bool)
+    /// Time Machine is stuck: it still believes the network disk is mounted after the connection
+    /// under it went, so every backup fails at once with `RESULT` 26 without trying to reconnect.
+    /// Seen on macOS 27.2; only restarting the Mac fixed it. `afterRestart`: the Mac has been
+    /// restarted since it was first seen, and it's still stuck.
+    case timeMachineStuck(afterRestart: Bool)
     /// `tmutil` exited 0 but the destination's `RESULT` couldn't be read.
     case resultUnreadable
     /// `tmutil` exited 0 and `RESULT` was 0, but nothing showed the result was from this backup:
@@ -91,6 +96,8 @@ public enum FailureReason: Codable, Equatable, Sendable {
     var statusText: String {
         switch self {
         case .diskUnreachable(isNetworkDisk: true): "\(description). \(Self.networkDiskHint)"
+        case .timeMachineStuck(afterRestart: false): "Time Machine is stuck. Restarting your Mac fixes this."
+        case .timeMachineStuck(afterRestart: true): "Time Machine is still stuck after a restart. Choose How to Fix This…"
         default: description
         }
     }
@@ -101,6 +108,8 @@ public enum FailureReason: Codable, Equatable, Sendable {
         case let .exitCode(code): "Time Machine stopped with code \(code)"
         case let .result(code): "Time Machine reported error \(code)"
         case .diskUnreachable: "the backup disk couldn't be reached"
+        case .timeMachineStuck(afterRestart: false): "Time Machine is stuck"
+        case .timeMachineStuck(afterRestart: true): "Time Machine is still stuck after a restart"
         case .resultUnreadable: "couldn't read Time Machine's result"
         case .notConfirmed: "couldn't tell whether Time Machine finished"
         }
@@ -204,6 +213,9 @@ public struct BackupHistory: Codable, Equatable, Sendable {
     /// Whether the one-time "First backup finished" ntfy message is still to be sent: set at the
     /// first success when ntfy is set up, cleared once the message is sent.
     public var firstBackupMessagePending: Bool?
+    /// Set while Time Machine is stuck (`FailureReason.timeMachineStuck`); cleared by the next
+    /// success.
+    public var stuck: StuckRecord?
     /// The tally since the last success, as stored. nil in history saved before it existed; see
     /// `sinceLastSuccess`.
     private var storedSinceLastSuccess: SinceLastSuccess?
@@ -231,6 +243,32 @@ public struct BackupHistory: Codable, Equatable, Sendable {
         }
         if attempt.outcome == .succeeded {
             lastSuccess = attempt.finished
+            stuck = nil
         }
+    }
+}
+
+/// What BackMeUp remembers while Time Machine is stuck, so it can tell when the Mac has been
+/// restarted and whether that helped.
+public struct StuckRecord: Codable, Equatable, Sendable {
+    /// When Time Machine was first seen stuck.
+    public var since: Date
+    /// When the Mac had last started up as of the latest stuck backup, or nil if that couldn't
+    /// be read. A different start-up time now means the Mac has restarted since.
+    public var bootTime: Date?
+    /// Whether a backup after a restart was stuck too.
+    public var restartDidNotHelp: Bool
+
+    public init(since: Date, bootTime: Date?, restartDidNotHelp: Bool = false) {
+        self.since = since
+        self.bootTime = bootTime
+        self.restartDidNotHelp = restartDidNotHelp
+    }
+
+    /// Whether the Mac has restarted since the latest stuck backup. Start-up times read a second
+    /// apart count as the same.
+    func hasRestarted(bootTime now: Date?) -> Bool {
+        guard let bootTime, let now else { return false }
+        return abs(now.timeIntervalSince(bootTime)) > 1
     }
 }

@@ -22,6 +22,11 @@ MainActor.assumeIsolated {
             if !scheduler.disks.isEmpty, !scheduler.disks.contains(where: \.isBackupDisk) {
                 print("No disk chosen")
             }
+            // Troubleshoot's checks, read live. Never names the server or the network.
+            await scheduler.troubleshoot()
+            for check in scheduler.troubleshootReport?.checks ?? [] {
+                print("Troubleshoot \(TroubleshootReport.mark(check.state)) \(check.name): \(check.sentence)")
+            }
             // Also checks that Time Machine's preferences can be read and parsed.
             let preferences = await system.readPreferences()
             print(preferences == nil ? "Can't read Time Machine's preferences" : "Read Time Machine's preferences")

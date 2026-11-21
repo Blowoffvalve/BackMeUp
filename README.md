@@ -99,6 +99,7 @@ Click the house icon in the menu bar. From top to bottom, the menu shows:
 - **The network you're on**, and whether backups may run on it. For example "Network: Home (backups allowed)" or "Network: Café (not chosen)".
 - **Allow backups on this network.** Only shown when you're on a network you haven't chosen. If macOS asks to use your location, that's only so BackMeUp can show the Wi-Fi name. If you say no, BackMeUp asks you to type a name, such as Home.
 - **Back Up Now.** Starts a backup straight away, even on battery, as long as checks 1, 2 and 6 are done.
+- **Troubleshoot…**, or **How to Fix This…** when BackMeUp has found a problem. See [Troubleshooting](#troubleshooting).
 - **Setup Checklist…**
 - **Settings…**
 - **Check for Updates…** (missing from copies that can't update themselves)
@@ -107,6 +108,24 @@ Click the house icon in the menu bar. From top to bottom, the menu shows:
 - **Quit BackMeUp**
 
 When something's wrong, the arrow in the house icon turns into an exclamation mark.
+
+## Troubleshooting
+
+After every failed backup, and whenever you choose **Troubleshoot…** in the menu, BackMeUp checks:
+
+1. **Network:** whether your Mac is on a network where backups are allowed.
+2. **Backup server:** for a network disk, whether its server answers. BackMeUp only knocks on the server's file-sharing port; it doesn't log in.
+3. **Time Machine:** whether Time Machine is stuck.
+
+The Troubleshoot window lists each check with a tick or a cross, and puts the steps for the first problem at the top. **Copy Details** copies a short summary to send to whoever set up your backups. It names no server, network or address.
+
+### When Time Machine is stuck
+
+Sometimes Time Machine loses track of a network backup disk that's still there. Every backup then fails at once ("Time Machine is stuck"), and it doesn't fix itself. BackMeUp calls it stuck only when Time Machine gave up within seconds, the server answers, and Time Machine's own log shows it lost the disk.
+
+Restarting your Mac fixes it. Save your work, choose Apple menu > Restart, and log in as usual. About 5 minutes after you log in, BackMeUp starts a backup (on an allowed network, and on power if you've turned off battery backups) and tells you "Fixed: backing up again". If it's still stuck, BackMeUp says so and doesn't ask you to restart again: use **Copy Details** and send them to whoever set up your backups.
+
+BackMeUp never restarts your Mac for you.
 
 ## Settings
 
@@ -126,11 +145,12 @@ BackMeUp sends a Mac notification when:
 
 - a backup starts but doesn't finish ("Backup failed")
 - there's been no successful backup for 3 days, whatever the reason ("Backups skipped", "Backups failed", "First backup not finished" or "Backups overdue")
-- backups work again after a problem ("Backups are working again")
+- Time Machine is stuck and your Mac needs a restart ("Time Machine is stuck"). See [Troubleshooting](#troubleshooting).
+- backups work again after a problem ("Backups are working again", or "Fixed: backing up again" after a restart)
 
 Each alert says why. For example: "No backup for 3 days. Your Mac hasn't been on a chosen network since Friday."
 
-If Time Machine lost track of the backup disk (its error 26), the alert and the menu say "The backup disk couldn't be reached." For a network disk they add: "Check you're on the right network. If it keeps happening, restarting your Mac usually fixes it." Time Machine can lose track of a network disk that's still there, and a restart clears that. Other Time Machine errors are shown by their number.
+If Time Machine couldn't reach the backup disk (its error 26), the alert and the menu say "The backup disk couldn't be reached." For a network disk they add: "Check you're on the right network. If it keeps happening, restarting your Mac usually fixes it." When BackMeUp can tell why, it says that instead: that the backup server isn't answering, or that Time Machine is stuck. Other Time Machine errors are shown by their number.
 
 Backups that are skipped never count as failures. A backup is skipped when your Mac is on a network you haven't chosen, on battery with battery backups turned off, when the USB disk isn't plugged in, or when the network disk's server can't be reached at all (Time Machine's error 18, for example just after you log in, while a VPN such as Tailscale is still connecting). Skipped backups still count towards days without a backup.
 

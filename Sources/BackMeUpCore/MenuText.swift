@@ -16,6 +16,9 @@ struct MenuText {
     var currentNetwork: NetworkReading?
     var networks: NetworkSettings
     var dates: RelativeDate
+    /// What Troubleshoot found after the last failed backup, as a sentence, when it found the
+    /// network or the server at fault. A stuck Time Machine is named by the failure itself.
+    var failureCause: String? = nil
 
     /// The first line: the last backup, or what went wrong with it.
     var statusLine: String {
@@ -24,6 +27,7 @@ struct MenuText {
         if isWaitingForSetup { return "Finish setting up: see the checklist" }
         switch history.attempts.last?.outcome {
         case let .failed(reason)?:
+            if let failureCause { return "Last backup failed. \(failureCause)" }
             return "Last backup failed: \(reason.statusText)"
         case .skipped(.notOnChosenNetwork)?:
             return "Waiting for a chosen network"
