@@ -134,7 +134,7 @@ If Time Machine lost track of the backup disk (its error 26), the alert and the 
 
 Backups that are skipped never count as failures. A backup is skipped when your Mac is on a network you haven't chosen, on battery with battery backups turned off, when the USB disk isn't plugged in, or when the network disk's server can't be reached at all (Time Machine's error 18, for example just after you log in, while a VPN such as Tailscale is still connecting). Skipped backups still count towards days without a backup.
 
-While a problem lasts, BackMeUp reminds you at most once a day.
+While a problem lasts, every further failed backup sends another alert. If backups are only being skipped, the "no backup for N days" alert comes again each day the count goes up.
 
 If your network disk can be reached on a network you haven't chosen, for example after you get a new router, BackMeUp asks once: "Back up on this network?" If it's yours, choose **Allow backups on this network** in the menu, or click **Allow Backups on This Network** in Settings.
 

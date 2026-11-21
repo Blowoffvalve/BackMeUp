@@ -88,7 +88,7 @@ After the first success, if ntfy is set up, a one-time "First backup finished" m
 
 - **Failure alert:** failures since the last success reach `failuresInARow` (default 1). Skips and pauses neither count nor break the run.
 - **Overdue alert:** no success for `daysWithoutBackup` days (default 3). It names the main reason: the most frequent skip reason since the last success (the most recent on a tie) with the day it started ("since Friday"), unless failures outnumber skips. Titles: "Backups skipped", "Backup failed" / "Backups failed", "First backup not finished" or "Backups overdue".
-- **Repeats:** at most once every 24 hours while the problem lasts.
+- **Repeats:** no time limit. While the problem lasts, the failure alert is sent again for every further failed backup, and the overdue alert each time its day count goes up. Ticks between attempts send nothing new, and neither does a restart.
 - **Working again:** the first success after an alert sends "Backups are working again" and clears the problem.
 
 Every alert goes out as a Mac notification and, when a topic is set, an ntfy POST with `Title` and `Tags` headers and an optional bearer token. The menu bar icon shows a problem whenever the policy has one, whether or not an alert was just sent.

@@ -7,11 +7,9 @@ import Foundation
 /// - Overdue alert: no success for `daysWithoutBackup` days, counted from the last success or, before
 ///   the first one, from when BackMeUp first ran. It names the most common skip reason since then,
 ///   or the failures if there were more of those.
-/// - Either repeats at most once every 24 hours while the problem lasts.
+/// - While the problem lasts, the failure alert comes again for every further failed backup, and
+///   the overdue alert each time its day count goes up. There's no time limit on repeats.
 struct AlertPolicy {
-    /// While a problem lasts, alerts repeat no more often than this.
-    static let repeatInterval: TimeInterval = 24 * 60 * 60
-
     var history: BackupHistory
     var settings: AlertSettings
     var now: Date
@@ -19,10 +17,19 @@ struct AlertPolicy {
 
     /// The alert to send now, if any.
     func alertDue() -> Alert? {
-        if let lastAlertSent = history.lastAlertSent, now < lastAlertSent.addingTimeInterval(Self.repeatInterval) {
-            return nil
+        guard let alert = problem() else { return nil }
+        guard let lastAlertSent = history.lastAlertSent else { return alert }
+        if alert.kind == .failed, failedSince(lastAlertSent) { return alert }
+        if alert.kind == .overdue, let since = overdueSince, days(since, to: now) > days(since, to: lastAlertSent) {
+            return alert
         }
-        return problem()
+        return nil
+    }
+
+    /// Whether the latest backup failed after `date`.
+    private func failedSince(_ date: Date) -> Bool {
+        guard let last = history.attempts.last, case .failed = last.outcome else { return false }
+        return last.finished > date
     }
 
     /// The alert describing the current problem, if there is one.
@@ -37,8 +44,8 @@ struct AlertPolicy {
     // MARK: Overdue
 
     private func overdue() -> Alert? {
-        guard let since = history.lastSuccess ?? history.monitoringSince else { return nil }
-        let days = Int(now.timeIntervalSince(since) / (24 * 60 * 60))
+        guard let since = overdueSince else { return nil }
+        let days = days(since, to: now)
         guard days >= settings.daysWithoutBackup else { return nil }
         let opening = "No backup for \(days) \(days == 1 ? "day" : "days")."
 
@@ -61,6 +68,14 @@ struct AlertPolicy {
             )
         }
         return Alert(kind: .overdue, title: "Backups overdue", body: opening)
+    }
+
+    /// When the overdue count starts: the last success, or when BackMeUp first ran.
+    private var overdueSince: Date? { history.lastSuccess ?? history.monitoringSince }
+
+    /// Whole days from `start` to `end`.
+    private func days(_ start: Date, to end: Date) -> Int {
+        Int(end.timeIntervalSince(start) / (24 * 60 * 60))
     }
 
     /// The reason given most often, the one that came up most recently if there's a tie.

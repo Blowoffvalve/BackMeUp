@@ -51,15 +51,25 @@ struct AlertTests {
         #expect(harness.notifications.map(\.body) == ["1 backup didn't finish. The backup disk couldn't be reached."])
     }
 
-    @Test func aLastingFailureIsAlertedAtMostOnceEvery24Hours() async {
+    @Test func everyFailedBackupIsAlerted() async {
         let harness = harnessWithNetworkDisk()
         harness.system.nextBackup = .fails(result: 19)
 
         await harness.start() // fails at 00:20, then retried every 80 minutes
         await harness.advance(minutes: 2800)
 
-        #expect(harness.system.notifications.map(\.date) == [harness.minutes(20), harness.minutes(20 + 24 * 60)])
-        #expect(harness.notifications.last?.body == "19 backups didn't finish. Time Machine reported error 19.")
+        #expect(harness.notifications.count == 36)
+        #expect(harness.notifications.last?.body == "36 backups didn't finish. Time Machine reported error 19.")
+    }
+
+    @Test func aFailureIsAlertedOnlyOnceHoweverOftenBackMeUpChecks() async {
+        let harness = harnessWithNetworkDisk()
+        harness.system.nextBackup = .fails(result: 19)
+
+        await harness.start() // fails at 00:20; the next backup starts at 01:20
+        await harness.advance(minutes: 59)
+
+        #expect(harness.notifications.count == 1)
     }
 
     @Test func theFirstSuccessAfterAnAlertSaysBackupsAreWorkingAgain() async {
@@ -213,10 +223,10 @@ struct AlertTests {
         harness.changeSettings { $0.retryMinutes = 15 }
         harness.system.nextBackup = .fails(result: 19, minutes: 0)
 
-        await harness.start() // fails at 00:00, then every 15 minutes, alerted once a day
+        await harness.start() // fails at 00:00, then every 15 minutes, each one alerted
         await harness.advance(minutes: 3 * 24 * 60)
 
-        #expect(harness.notifications.map(\.body).last == "288 backups didn't finish. Time Machine reported error 19.")
+        #expect(harness.notifications.map(\.body).last == "289 backups didn't finish. Time Machine reported error 19.")
     }
 
     @Test func failuresInHistorySavedByAnOlderVersionStillCount() async {
@@ -390,9 +400,9 @@ struct AlertTests {
         let harness = harnessWithNetworkDisk()
         harness.system.nextBackup = .fails(result: 19)
 
-        await harness.start()
+        await harness.start() // fails at 00:20; the next backup starts at 01:20
         await harness.restart()
-        await harness.advance(minutes: 60)
+        await harness.advance(minutes: 59)
 
         #expect(harness.notifications.count == 1)
     }
