@@ -15,12 +15,17 @@ public struct Destination: Equatable, Sendable {
     /// Where the disk is mounted, if it is. Network disks are usually not mounted between backups;
     /// Time Machine mounts them itself.
     public var mountPoint: String?
+    /// The network disk's server, from the host in Time Machine's `URL` for it
+    /// (`smb://user@server/share`). nil for a local disk, or when the URL has no host. For
+    /// Troubleshoot's "is the server answering" check; never logged or shown.
+    public var serverHost: String?
 
-    public init(kind: Kind, id: String?, name: String? = nil, mountPoint: String? = nil) {
+    public init(kind: Kind, id: String?, name: String? = nil, mountPoint: String? = nil, serverHost: String? = nil) {
         self.kind = kind
         self.id = id
         self.name = name
         self.mountPoint = mountPoint
+        self.serverHost = serverHost
     }
 }
 
@@ -62,7 +67,13 @@ extension DestinationInfo {
         // A disk of a kind we don't know is left out, rather than guessed at.
         var disks = entries.compactMap { entry in
             Destination.Kind(tmutilKind: entry.string("Kind")).map {
-                Destination(kind: $0, id: entry.string("ID"), name: entry.string("Name"), mountPoint: entry.string("MountPoint"))
+                Destination(
+                    kind: $0,
+                    id: entry.string("ID"),
+                    name: entry.string("Name"),
+                    mountPoint: entry.string("MountPoint"),
+                    serverHost: $0 == .network ? Self.host(inURL: entry.string("URL")) : nil
+                )
             }
         }
         // With several, a disk without an ID can't be chosen (`--destination` needs one).
@@ -75,6 +86,14 @@ extension DestinationInfo {
         case 1: self = .configured(disks[0])
         default: self = .several(disks)
         }
+    }
+}
+
+extension DestinationInfo {
+    /// The host in a Time Machine URL such as `smb://user@server/share`, or nil.
+    static func host(inURL url: String?) -> String? {
+        guard let url, let host = URLComponents(string: url)?.host, !host.isEmpty else { return nil }
+        return host.removingPercentEncoding ?? host
     }
 }
 

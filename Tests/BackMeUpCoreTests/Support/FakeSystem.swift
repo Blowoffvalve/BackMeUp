@@ -146,6 +146,26 @@ final class FakeSystem: System {
         network
     }
 
+    // MARK: Troubleshoot
+
+    /// Whether the backup server answers on its file-sharing port.
+    var serverAnswering = true
+    /// Every server asked whether it answers.
+    private(set) var serversAsked: [String] = []
+    /// What Time Machine's log says about a lost mount during a backup: nil when the log can't be read.
+    var timeMachineLogShowsLostMount: Bool? = true
+    /// When the Mac last started up. Change it to simulate a restart.
+    var bootTime: Date? = SchedulerHarness.startDate.addingTimeInterval(-3600)
+
+    func serverAnswers(host: String) async -> Bool {
+        serversAsked.append(host)
+        return serverAnswering
+    }
+
+    func timeMachineLostItsMount(from start: Date, to end: Date) async -> Bool? {
+        timeMachineLogShowsLostMount
+    }
+
     func loadNetworks() -> NetworkSettings? { storedNetworks }
     func saveNetworks(_ networks: NetworkSettings) { storedNetworks = networks }
     // MARK: Backups that run while time passes

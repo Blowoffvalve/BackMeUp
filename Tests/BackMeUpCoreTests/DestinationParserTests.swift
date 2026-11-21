@@ -5,7 +5,7 @@ import BackMeUpCore
 struct DestinationParserTests {
     @Test func networkDisk() throws {
         let info = DestinationInfo(destinationInfoOutput: try fixture("destinationinfo-network.plist"))
-        #expect(info == .configured(Destination(kind: .network, id: "00000000-0000-0000-0000-000000000001", name: "TimeMachine")))
+        #expect(info == .configured(Destination(kind: .network, id: "00000000-0000-0000-0000-000000000001", name: "TimeMachine", serverHost: "backup-server")))
     }
 
     @Test func localDisk() throws {
@@ -17,11 +17,11 @@ struct DestinationParserTests {
         let info = DestinationInfo(destinationInfoOutput: try fixture("destinationinfo-two-disks.plist"))
         #expect(info == .several([
             Destination(kind: .local, id: "00000000-0000-0000-0000-000000000002", name: "Backup Disk", mountPoint: "/Volumes/Backup Disk"),
-            Destination(kind: .network, id: "00000000-0000-0000-0000-000000000001", name: "TimeMachine"),
+            Destination(kind: .network, id: "00000000-0000-0000-0000-000000000001", name: "TimeMachine", serverHost: "backup-server"),
         ]))
     }
 
-    static let networkDisk = Destination(kind: .network, id: "00000000-0000-0000-0000-000000000001", name: "TimeMachine")
+    static let networkDisk = Destination(kind: .network, id: "00000000-0000-0000-0000-000000000001", name: "TimeMachine", serverHost: "backup-server")
     static let usbDiskID = "<key>ID</key>\n\t\t\t<string>00000000-0000-0000-0000-000000000002</string>"
     static let networkDiskID = "<key>ID</key>\n\t\t\t<string>00000000-0000-0000-0000-000000000001</string>"
 
@@ -58,7 +58,32 @@ struct DestinationParserTests {
     @Test func theOnlyDiskIsUsedEvenWithoutAnID() throws {
         let output = try fixture("destinationinfo-network.plist")
             .replacingOccurrences(of: Self.networkDiskID, with: "")
-        #expect(DestinationInfo(destinationInfoOutput: output) == .configured(Destination(kind: .network, id: nil, name: "TimeMachine")))
+        #expect(DestinationInfo(destinationInfoOutput: output) == .configured(Destination(kind: .network, id: nil, name: "TimeMachine", serverHost: "backup-server")))
+    }
+
+    @Test func theServerIsTheHostInTheNetworkDisksURL() throws {
+        let info = DestinationInfo(destinationInfoOutput: try fixture("destinationinfo-network.plist"))
+        #expect(info.disks.first?.serverHost == "backup-server")
+    }
+
+    @Test(arguments: [
+        ("smb://backup-user@backup-server/TimeMachine", "backup-server"),
+        ("smb://backup-server.local/Share%20Name", "backup-server.local"),
+        ("afp://user@192.0.2.10/Backups", "192.0.2.10"),
+        ("smb:///NoHost", nil),
+        ("not a url", nil),
+    ] as [(String, String?)])
+    func aNetworkDisksServerComesFromItsURL(url: String, host: String?) throws {
+        let output = try fixture("destinationinfo-network.plist")
+            .replacingOccurrences(of: "smb://backup-user@backup-server/TimeMachine", with: url)
+        #expect(DestinationInfo(destinationInfoOutput: output).disks.first?.serverHost == host)
+    }
+
+    @Test func aNetworkDiskWithoutAURLHasNoServer() throws {
+        let output = try fixture("destinationinfo-network.plist")
+            .replacingOccurrences(of: "<key>URL</key>\n\t\t\t<string>smb://backup-user@backup-server/TimeMachine</string>", with: "")
+        #expect(output.contains("URL") == false)
+        #expect(DestinationInfo(destinationInfoOutput: output).disks.first?.serverHost == nil)
     }
 
     @Test(arguments: ["destinationinfo-none.plist", "destinationinfo-none.txt"])

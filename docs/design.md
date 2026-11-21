@@ -89,13 +89,23 @@ After the first success, if ntfy is set up, a one-time "First backup finished" m
 - **Failure alert:** failures since the last success reach `failuresInARow` (default 1). Skips and pauses neither count nor break the run.
 - **Overdue alert:** no success for `daysWithoutBackup` days (default 3). It names the main reason: the most frequent skip reason since the last success (the most recent on a tie) with the day it started ("since Friday"), unless failures outnumber skips. Titles: "Backups skipped", "Backup failed" / "Backups failed", "First backup not finished" or "Backups overdue".
 - **Repeats:** no time limit. While the problem lasts, the failure alert is sent again for every further failed backup, and the overdue alert each time its day count goes up. Ticks between attempts send nothing new, and neither does a restart.
-- **Working again:** the first success after an alert sends "Backups are working again" and clears the problem.
+- **Stuck Time Machine:** when the latest backup failed with `FailureReason.timeMachineStuck`, the alert is "Time Machine is stuck" (or "Restarting didn't fix Time Machine" after a restart), sent on the first one whatever `failuresInARow` says, since it doesn't clear by itself.
+- **Troubleshoot's cause:** when Troubleshoot, run after the failure, finds the network or the server at fault, the failure alert and the status line give its sentence instead of the failure's own explanation.
+- **Working again:** the first success after an alert sends "Backups are working again" and clears the problem; "Fixed: backing up again" when Time Machine had been stuck.
 
 Every alert goes out as a Mac notification and, when a topic is set, an ntfy POST with `Title` and `Tags` headers and an optional bearer token. The menu bar icon shows a problem whenever the policy has one, whether or not an alert was just sent.
 
 **Choose a backup disk** (`.chooseDisk`): a Mac notification and ntfy (warning tag), sent once when the chosen disk is removed with at least one disk left, and once at the first launch after an update when Time Machine has several disks and none is chosen. Not when a disk is added, and not when the disks can't be read. It isn't repeated: if backups stay paused, the overdue alert covers it.
 
 One extra notification, Mac only: when a network disk is mounted on a network that isn't chosen and other networks are, BackMeUp asks once per network, "Back up on this network?" (for a new router).
+
+## Troubleshoot
+
+`Scheduler.troubleshoot()` runs three checks into a `TroubleshootReport`: the network rules (`NetworkSettings.skipReason`), whether the network disk's server answers on port 445 (`System.serverAnswers`, `nc -z -G 5`; the host comes from the `URL` in `tmutil destinationinfo -X`), and whether Time Machine is stuck (from `BackupHistory.stuck`). It runs after every failed backup and from the menu, and never starts a backup. The window shows the first failed check's steps, then every check. `troubleshootDetails` is the Copy Details text, which names no host, network or address.
+
+**Stuck Time Machine.** Seen on macOS 27.2: `backupd` kept believing a network disk image was mounted after the SMB mount under it was gone, so every backup failed with `RESULT` 26 within milliseconds, without reconnecting, for over a day. `sudo killall backupd` didn't replace the process; a restart fixed it. A failed backup is `timeMachineStuck` when all of these hold: `RESULT` 26 on a network disk, `tmutil startbackup --block` returned within `stuckFailureSeconds` (10), the server answers, and `System.timeMachineLostItsMount` doesn't say no. That reads `backupd`'s lines in the unified log for the attempt (`log show`, as an ordinary user) for "no volume mounted at this path"; if the log can't be read, the other signs are enough.
+
+`BackupHistory.stuck` (`StuckRecord`) holds when it started and the Mac's start-up time (`kern.boottime`, `System.bootTime`). At the first tick after launch, if the start-up time has changed, the next backup is set for 5 minutes later (`backupAfterRestartDelay`), under the usual rules, and nothing starts before then. A success clears the record and sends "Fixed: backing up again". Stuck again after a restart sets `restartDidNotHelp`, and the alert and the window ask for Copy Details instead of another restart. Reopening BackMeUp without a restart changes nothing.
 
 ## Networks
 

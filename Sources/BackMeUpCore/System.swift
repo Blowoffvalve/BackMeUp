@@ -28,6 +28,19 @@ public protocol System {
     /// be run.
     func startBackup(destinationID: String?) async -> Int32?
 
+    /// Whether the backup server answers on its file-sharing port (SMB, 445) within a few
+    /// seconds. Only opens a connection and closes it; logs in to nothing.
+    func serverAnswers(host: String) async -> Bool
+
+    /// Whether Time Machine's log shows that it had lost its network disk's mount ("no volume
+    /// mounted at this path", from `backupd`) between `start` and `end`. nil if the log couldn't
+    /// be read.
+    func timeMachineLostItsMount(from start: Date, to end: Date) async -> Bool?
+
+    /// When the Mac last started up, or nil if it can't be read. A different value from an
+    /// earlier reading means the Mac has restarted since.
+    var bootTime: Date? { get }
+
     /// The network the Mac is on, identified by its router's hardware address: the default route
     /// on a physical interface (never a VPN), looked up in the ARP table. Sends nothing on the
     /// network. The Wi-Fi name is included only when Location permission allows it.

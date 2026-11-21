@@ -19,6 +19,9 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         action: #selector(allowCurrentNetwork),
         keyEquivalent: ""
     )
+    /// "Troubleshoot…", or "How to Fix This…" when Troubleshoot found a problem.
+    private let troubleshootItem = NSMenuItem(title: "Troubleshoot…", action: #selector(openTroubleshoot), keyEquivalent: "")
+    private lazy var troubleshootWindow = TroubleshootWindowController(scheduler: scheduler)
     private lazy var settingsWindow = SettingsWindowController(scheduler: scheduler, updater: updater)
     private lazy var checklistWindow = ChecklistWindowController(
         scheduler: scheduler,
@@ -54,6 +57,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menu.addItem(allowNetworkItem)
         menu.addItem(.separator())
         menu.addItem(backUpNowItem)
+        troubleshootItem.target = self
+        menu.addItem(troubleshootItem)
         menu.addItem(checklistItem)
         menu.addItem(settingsItem)
         if updater.isAvailable {
@@ -106,6 +111,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     @objc private func openChecklist() {
         checklistWindow.show()
+    }
+
+    @objc private func openTroubleshoot() {
+        troubleshootWindow.show()
     }
 
     @objc private func checkForUpdates() {
@@ -164,6 +173,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         networkItem.title = scheduler.networkLine
         networkItem.isHidden = scheduler.networkLine.isEmpty
         allowNetworkItem.isHidden = !scheduler.canAllowCurrentNetwork
+        troubleshootItem.title = scheduler.needsFixing ? "How to Fix This…" : "Troubleshoot…"
+        if troubleshootWindow.isVisible { troubleshootWindow.reload() }
         if checklistWindow.isVisible { checklistWindow.reload() }
         if settingsWindow.isVisible {
             settingsWindow.reloadNetworks()

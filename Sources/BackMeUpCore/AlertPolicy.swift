@@ -14,6 +14,9 @@ struct AlertPolicy {
     var settings: AlertSettings
     var now: Date
     var calendar: Calendar
+    /// What Troubleshoot found after the last failed backup, as a sentence, when it found the
+    /// network or the server at fault. Replaces the failure's own explanation.
+    var failureCause: String? = nil
 
     /// The alert to send now, if any.
     func alertDue() -> Alert? {
@@ -35,10 +38,30 @@ struct AlertPolicy {
     /// The alert describing the current problem, if there is one.
     func problem() -> Alert? {
         let tally = history.sinceLastSuccess
+        // A stuck Time Machine won't fix itself, so it's alerted on the first one.
+        if case let .timeMachineStuck(afterRestart)? = tally.lastFailure,
+           case .failed(.timeMachineStuck)? = history.attempts.last?.outcome {
+            return Self.stuckAlert(afterRestart: afterRestart)
+        }
         if let last = tally.lastFailure, tally.failures >= settings.failuresInARow {
             return Alert(kind: .failed, title: failedTitle(tally.failures), body: failureSentence(tally.failures, last))
         }
         return overdue()
+    }
+
+    /// "Time Machine is stuck", or, after a restart that didn't help, where to get help.
+    static func stuckAlert(afterRestart: Bool) -> Alert {
+        afterRestart
+            ? Alert(
+                kind: .failed,
+                title: "Restarting didn't fix Time Machine",
+                body: "Time Machine is still stuck after a restart. Choose How to Fix This… in the BackMeUp menu to copy the details for whoever set up your backups."
+            )
+            : Alert(
+                kind: .failed,
+                title: "Time Machine is stuck",
+                body: "Your backup disk is fine, but Time Machine has lost track of it. Restarting your Mac fixes this."
+            )
     }
 
     // MARK: Overdue
@@ -90,7 +113,7 @@ struct AlertPolicy {
     }
 
     private func failureSentence(_ count: Int, _ last: FailureReason) -> String {
-        "\(count == 1 ? "1 backup" : "\(count) backups") didn't finish. \(last.alertSentence)"
+        "\(count == 1 ? "1 backup" : "\(count) backups") didn't finish. \(failureCause ?? last.alertSentence)"
     }
 
     /// "today", "yesterday", "Friday" within the last week, else "3 January".
@@ -120,6 +143,8 @@ extension FailureReason {
         case .diskUnreachable(isNetworkDisk: false): "The backup disk couldn't be reached."
         case .diskUnreachable(isNetworkDisk: true):
             "The backup disk couldn't be reached. \(FailureReason.networkDiskHint)"
+        case .timeMachineStuck(afterRestart: false): "Time Machine is stuck. Restarting your Mac fixes this."
+        case .timeMachineStuck(afterRestart: true): "Time Machine is still stuck after a restart."
         case .resultUnreadable: "BackMeUp couldn't read Time Machine's result."
         case .notConfirmed: "BackMeUp couldn't tell whether Time Machine finished the backup."
         }

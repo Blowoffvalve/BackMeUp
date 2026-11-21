@@ -25,6 +25,11 @@ final class UninstallableSystem: System {
     var now: Date { base.now }
     var powerSource: PowerSource { base.powerSource }
     var appVersion: String? { base.appVersion }
+    var bootTime: Date? { base.bootTime }
+    func serverAnswers(host: String) async -> Bool { await base.serverAnswers(host: host) }
+    func timeMachineLostItsMount(from start: Date, to end: Date) async -> Bool? {
+        await base.timeMachineLostItsMount(from: start, to: end)
+    }
     func readTimeMachineStatus() async -> TimeMachineStatus { await base.readTimeMachineStatus() }
     func readBackupProgress() async -> BackupProgress? { await base.readBackupProgress() }
     func readDestinationInfo() async -> DestinationInfo { await base.readDestinationInfo() }

@@ -94,6 +94,8 @@ public final class Scheduler {
     /// When the next backup is due: the backup interval after the last success, but no sooner than
     /// the retry interval after a failure or skip. With no success yet, straight away.
     public var nextBackupDue: Date {
+        // After a restart while Time Machine was stuck: one backup, a few minutes after launch.
+        if let backupAfterRestartDue { return backupAfterRestartDue }
         var due = dueByInterval
         if let last = history.attempts.last, last.outcome != .succeeded {
             due = max(due, last.finished.addingTimeInterval(TimeInterval(settings.retryMinutes * 60)))
@@ -125,8 +127,10 @@ public final class Scheduler {
             system.saveSetupState(setupState)
         }
         askToChooseThisNetworkIfNeeded()
+        planBackupAfterRestartIfNeeded()
         updateSleepPrevention()
-        if !isBackingUp, !isTimeMachineRunning,
+        let isWaitingAfterRestart = backupAfterRestartDue.map { system.now < $0 } ?? false
+        if !isBackingUp, !isTimeMachineRunning, !isWaitingAfterRestart,
            system.now >= nextBackupDue || isBackOnAChosenNetwork || isSetupJustFinished || isOtherDiskBackupOver {
             startAttempt(byPerson: false)
         }
@@ -462,11 +466,112 @@ public final class Scheduler {
         describe()
     }
 
+    // MARK: Troubleshoot
+
+    /// How long after launch the backup after a restart starts: an older Mac may still be busy
+    /// starting up.
+    static let backupAfterRestartDelay: TimeInterval = 5 * 60
+    /// A `RESULT` 26 this soon after `tmutil startbackup` began means Time Machine didn't try to
+    /// reach the disk. Seen at well under a second when it was stuck; reaching a server that's
+    /// gone takes longer.
+    static let stuckFailureSeconds: TimeInterval = 10
+
+    /// What Troubleshoot found the last time it ran: after a failed backup, or from the menu.
+    /// nil before it has run, and after a success.
+    public private(set) var troubleshootReport: TroubleshootReport?
+
+    /// Whether Troubleshoot found something to fix. The menu then offers "How to Fix This…".
+    public var needsFixing: Bool { troubleshootReport?.firstFailure != nil }
+
+    /// Troubleshoot's findings as plain text, for Copy Details. Names no server, network or address.
+    public var troubleshootDetails: String? {
+        troubleshootReport?.details(
+            history: history,
+            appVersion: system.appVersion,
+            dates: RelativeDate(now: system.now, calendar: calendar)
+        )
+    }
+
+    /// When the one backup after a restart is due, while it's waiting to start.
+    private var backupAfterRestartDue: Date?
+    /// Whether this launch has looked for a restart since Time Machine got stuck.
+    private var lookedForRestart = false
+
+    /// Runs Troubleshoot's checks now: the network, whether the server answers, and whether Time
+    /// Machine is stuck. Never starts a backup. Time Machine counts as stuck from the last backup's
+    /// result, since only a backup attempt shows it.
+    public func troubleshoot() async {
+        guard !isUninstalled else { return }
+        currentNetwork = await system.readNetwork()
+        // The backup disk as last read: every backup and every tick reads it.
+        if destination == nil { await readChecklist() }
+        let disk: Destination? = if case let .configured(disk)? = destination { disk } else { nil }
+        var serverAnswers: Bool?
+        if disk?.kind == .network, let host = disk?.serverHost {
+            serverAnswers = await system.serverAnswers(host: host)
+        }
+        troubleshootReport = TroubleshootReport(
+            TroubleshootInputs(disk: disk, network: currentNetwork, networks: networks, serverAnswers: serverAnswers, stuck: history.stuck),
+            date: system.now
+        )
+        describe()
+    }
+
+    /// At the first tick after launch: if Time Machine was stuck and the Mac has restarted since,
+    /// plans one backup a few minutes from now, under the usual rules, to see whether that fixed it.
+    private func planBackupAfterRestartIfNeeded() {
+        guard !lookedForRestart else { return }
+        lookedForRestart = true
+        guard let stuck = history.stuck, stuck.hasRestarted(bootTime: system.bootTime) else { return }
+        backupAfterRestartDue = system.now.addingTimeInterval(Self.backupAfterRestartDelay)
+        system.log("The Mac has restarted since Time Machine got stuck; backing up in 5 minutes to check")
+    }
+
+    /// Whether a fast `RESULT` 26 from a network disk is Time Machine being stuck: the server
+    /// answers, and Time Machine's log, if it can be read, shows it had lost the disk's mount.
+    private func isTimeMachineStuck(disk: Destination?, commandStarted: Date) async -> Bool {
+        let seconds = system.now.timeIntervalSince(commandStarted)
+        guard seconds < Self.stuckFailureSeconds, let host = disk?.serverHost,
+              await system.serverAnswers(host: host)
+        else { return false }
+        let lostMount = await system.timeMachineLostItsMount(from: commandStarted, to: system.now)
+        system.log("Time Machine couldn't reach the disk after \(Int(seconds)) s with the server answering; "
+            + (lostMount == nil ? "its log couldn't be read" : lostMount == true ? "its log shows it lost the disk's mount" : "its log doesn't show a lost mount"))
+        return lostMount != false
+    }
+
+    /// Records that Time Machine is stuck, noting a restart since the last time. Returns whether
+    /// it's still stuck after a restart.
+    private func recordStuck(since started: Date) -> Bool {
+        let bootTime = system.bootTime
+        guard var stuck = history.stuck else {
+            history.stuck = StuckRecord(since: started, bootTime: bootTime)
+            return false
+        }
+        if stuck.hasRestarted(bootTime: bootTime) {
+            stuck.restartDidNotHelp = true
+            stuck.bootTime = bootTime
+        }
+        history.stuck = stuck
+        return stuck.restartDidNotHelp
+    }
+
+    /// The sentence naming what Troubleshoot found at fault after a failed backup, when it's the
+    /// network or the server, and the report is from after that backup.
+    private var failureCause: String? {
+        guard case .failed? = history.attempts.last?.outcome, let report = troubleshootReport,
+              let last = history.attempts.last, report.date >= last.finished,
+              let failure = report.firstFailure, failure.kind != .timeMachine
+        else { return nil }
+        return failure.sentence
+    }
+
     // MARK: Running a backup
 
     /// `byPerson`: Back Up Now, rather than the schedule.
     private func startAttempt(byPerson: Bool) {
         guard backupTask == nil else { return }
+        backupAfterRestartDue = nil
         backupTask = Task {
             let attempt = await runAttempt(byPerson: byPerson)
             // Uninstalled while Time Machine ran: Time Machine carries on, but nothing is recorded.
@@ -475,11 +580,17 @@ public final class Scheduler {
                 return
             }
             let isFirstSuccess = history.lastSuccess == nil && attempt.outcome == .succeeded
+            let wasStuck = history.stuck != nil
             history.record(attempt)
             system.log(attempt.outcome.logLine)
             if isFirstSuccess, ntfy.isSetUp { history.firstBackupMessagePending = true }
             system.saveHistory(history)
-            checkAlerts()
+            switch attempt.outcome {
+            case .failed: await troubleshoot()
+            case .succeeded: troubleshootReport = nil
+            case .skipped, .paused: break
+            }
+            checkAlerts(fixedByRestart: wasStuck)
             sendFirstBackupMessageIfPending()
             backupTask = nil
             describe()
@@ -534,6 +645,7 @@ public final class Scheduler {
         updateSleepPrevention()
         let destinationArgument = diskChoice.destinationArgument(for: destinationID)
         changeDiskChoice { $0.recordBackupStarting(to: destinationID) }
+        let commandStarted = system.now
         let exitCode = await system.startBackup(destinationID: destinationArgument)
         backupCommandRunning = false
         updateSleepPrevention()
@@ -544,7 +656,12 @@ public final class Scheduler {
             diskKind: disk?.kind,
             isFirstBackup: history.lastSuccess == nil
         )
-        return BackupAttempt(started: started, finished: system.now, outcome: verdict.outcome)
+        var outcome = verdict.outcome
+        if outcome == .failed(.diskUnreachable(isNetworkDisk: true)),
+           await isTimeMachineStuck(disk: disk, commandStarted: commandStarted) {
+            outcome = .failed(.timeMachineStuck(afterRestart: recordStuck(since: started)))
+        }
+        return BackupAttempt(started: started, finished: system.now, outcome: outcome)
     }
 
     /// Keeps the Mac awake only while BackMeUp's backup runs on AC power. On battery it sleeps as
@@ -560,20 +677,23 @@ public final class Scheduler {
     public private(set) var hasProblem = false
 
     /// Sends an alert if one is due, or "working again" on the first success after an alert.
-    private func checkAlerts() {
+    /// `fixedByRestart`: the backup just recorded was the first success since Time Machine was stuck.
+    private func checkAlerts(fixedByRestart: Bool = false) {
         if history.lastAlertSent != nil, let lastSuccess = history.lastSuccess,
            history.attempts.last?.outcome == .succeeded {
             history.lastAlertSent = nil
             system.saveHistory(history)
             hasProblem = false
-            send(Alert(kind: .workingAgain, title: "Backups are working again", body: "Last backup: \(format(lastSuccess))"))
+            send(fixedByRestart
+                ? Alert(kind: .workingAgain, title: "Fixed: backing up again", body: "Restarting your Mac fixed Time Machine. Last backup: \(format(lastSuccess))")
+                : Alert(kind: .workingAgain, title: "Backups are working again", body: "Last backup: \(format(lastSuccess))"))
             return
         }
         if history.monitoringSince == nil {
             history.monitoringSince = system.now
             system.saveHistory(history)
         }
-        let policy = AlertPolicy(history: history, settings: settings.alerts, now: system.now, calendar: calendar)
+        let policy = AlertPolicy(history: history, settings: settings.alerts, now: system.now, calendar: calendar, failureCause: failureCause)
         hasProblem = policy.problem() != nil
         guard let alert = policy.alertDue() else { return }
         history.lastAlertSent = system.now
@@ -674,7 +794,8 @@ public final class Scheduler {
             isWaitingForSetup: checklist?.allowsBackups == false,
             currentNetwork: currentNetwork,
             networks: networks,
-            dates: RelativeDate(now: system.now, calendar: calendar)
+            dates: RelativeDate(now: system.now, calendar: calendar),
+            failureCause: failureCause
         )
         statusLine = text.statusLine
         nextBackupLine = text.nextBackupLine
