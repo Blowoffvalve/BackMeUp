@@ -21,7 +21,7 @@ The `Scheduler` is the core. Everything outside the app goes through the **Syste
 4. asks once per network whether to allow a new network (see Networks)
 5. holds or releases sleep prevention
 6. starts a backup if one is due and none is running, BackMeUp's or Time Machine's own
-7. checks alerts and updates the menu's lines
+7. checks alerts and updates the menu's lines, including the backup strip (`BackupStripText`): a dot per recent hour, day or week (the backup interval's unit) saying whether it was backed up, failed, was skipped or had nothing due, with a hover caption saying why
 
 **When a backup is due:** the backup interval (hours, days or weeks) after the last success, or straight away if there's never been one. After a failure, skip or pause, no sooner than the retry interval (minimum 15 minutes) after that attempt. Three shortcuts skip the retry wait when a backup is already due by the interval: the Mac comes back to a chosen network after a network skip, the checklist starts allowing backups after a setup skip, or another disk's backup ends after Back Up Now was skipped for it.
 

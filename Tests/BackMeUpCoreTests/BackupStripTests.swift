@@ -2,7 +2,7 @@ import Foundation
 import Testing
 import BackMeUpCore
 
-/// The strip of dots under the menu's status line: which recent days were backed up.
+/// The strip of dots under the menu's status line: which recent hours, days or weeks were backed up.
 @MainActor
 @Suite("Backup strip")
 struct BackupStripTests {

@@ -29,7 +29,8 @@ public final class Scheduler {
     public private(set) var statusLine = ""
     /// The menu's second line: when the next backup is planned.
     public private(set) var nextBackupLine = ""
-    /// The strip of dots between those two lines: which recent days were backed up.
+    /// The strip of dots between those two lines: which recent hours, days or weeks (the backup
+    /// interval's unit) were backed up.
     public private(set) var backupStrip = BackupStrip.hidden
 
     /// The first-run checklist as of the last tick or refresh, or nil before the first one.

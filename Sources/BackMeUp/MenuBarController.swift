@@ -12,7 +12,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     private let statusLineItem = NSMenuItem(title: "Checking Time Machine…", action: nil, keyEquivalent: "")
     private let nextBackupItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-    /// The strip of dots: which recent days were backed up.
+    /// The strip of dots: which recent hours, days or weeks were backed up.
     private let stripItem = NSMenuItem()
     private let stripView = BackupStripView()
     private let backUpNowItem = NSMenuItem(title: "Back Up Now", action: #selector(backUpNow), keyEquivalent: "")
