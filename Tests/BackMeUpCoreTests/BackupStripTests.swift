@@ -462,13 +462,14 @@ struct BackupStripTests {
         harness.at(minutes: 5) { $0.backupProgress = BackupProgress(fraction: 0.352, timeRemaining: 3 * 3600) }
 
         await harness.start()
-        #expect(harness.scheduler.backupStrip.slots.last?.caption == "backing up")
+        #expect(harness.scheduler.backupStrip.slots.last?.caption == "Thu 1 Jan: backing up")
+        #expect(harness.scheduler.backupStrip.slots.last?.accessibilityLabel == "Thursday 1 January: backing up")
 
         await harness.advance(minutes: 5)
         #expect(harness.statusLine.contains("35.2%"))
-        #expect(harness.scheduler.backupStrip.slots.last?.caption == "backing up: 35.2%")
+        #expect(harness.scheduler.backupStrip.slots.last?.caption == "Thu 1 Jan: backing up: 35.2%")
         #expect(harness.scheduler.backupStrip.slots.last?.isCurrent == true)
-        #expect(harness.scheduler.backupStrip.slots.last?.accessibilityLabel == "backing up: 35.2%")
+        #expect(harness.scheduler.backupStrip.slots.last?.accessibilityLabel == "Thursday 1 January: backing up: 35.2%")
     }
 
     // MARK: How long reasons are kept

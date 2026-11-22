@@ -106,12 +106,10 @@ struct BackupStripText {
             }
             return slot(start, unit, kind, isCurrent: isCurrent) { _ in why }
         }
-        if isBackingUp, !slots.isEmpty {
-            // The same figure as the status line. It has no date to write out, so VoiceOver reads
-            // it as it is.
-            let caption = progress.map { "backing up: \($0.percentText)" } ?? "backing up"
-            slots[slots.count - 1].caption = caption
-            slots[slots.count - 1].accessibilityLabel = caption
+        if isBackingUp, let current = slots.last {
+            // The same figure as the status line, after the slot's date like every caption.
+            let what = progress.map { "backing up: \($0.percentText)" } ?? "backing up"
+            slots[slots.count - 1] = slot(current.start, unit, current.kind, isCurrent: true) { _ in what }
         }
         let backedUp = slots.filter { $0.kind == .backedUp }.count
         return BackupStrip(
