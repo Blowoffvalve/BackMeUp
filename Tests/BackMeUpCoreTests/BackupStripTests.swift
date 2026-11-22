@@ -536,6 +536,77 @@ struct BackupStripTests {
         #expect(saved?.sinceLastSuccess.skipCount == 3100)
     }
 
+    // MARK: Saved history
+
+    @Test func historySavedByThisVersionLoadsUnchanged() async throws {
+        let harness = harnessWithNetworkDisk()
+        harness.system.nextBackup = .fails(result: 19)
+        harness.at(minutes: 60) { $0.network = .none }
+        harness.at(minutes: 120) {
+            $0.network = FakeSystem.home
+            $0.nextBackup = .succeeds
+        }
+        await harness.start()
+        await harness.advance(minutes: 4 * 60)
+        let history = try #require(harness.system.storedHistory)
+        #expect(history.attempts.map(\.outcome) == [
+            .failed(.result(19)), .skipped(.notOnChosenNetwork), .succeeded,
+        ])
+        let strip = harness.scheduler.backupStrip
+
+        // As the real app saves and loads it.
+        let saved = try JSONEncoder().encode(history)
+        harness.system.storedHistory = try JSONDecoder().decode(BackupHistory.self, from: saved)
+        await harness.restart()
+
+        #expect(harness.system.storedHistory == history)
+        #expect(harness.scheduler.backupStrip == strip)
+        #expect(harness.scheduler.backupStrip.slots.last?.kind == .backedUp)
+    }
+
+    // MARK: Privacy
+
+    /// Every kind of slot, and a backup in progress: none names the network, server or disk.
+    @Test func noCaptionNamesTheNetworkServerOrDisk() async {
+        let disk = Destination(kind: .network, id: "network-id", name: "Private Disk Name",
+                               mountPoint: "/Volumes/Private Disk Name", serverHost: "private-server-host")
+        let harness = SchedulerHarness()
+        harness.system.destinationInfo = .configured(disk)
+        harness.system.preferences = TimeMachinePreferences(autoBackup: false, destinations: [
+            .init(id: "network-id", encryption: .encrypted, result: 0, snapshotDates: []),
+        ])
+        harness.system.storedSettings = BackupSettings(backupInterval: .init(count: 2, unit: .days), retryMinutes: 60)
+        var history = BackupHistory(attempts: [
+            Self.attempt(day: 6, hour: 9, .succeeded), // Fri 26 Dec; nothing due on the 27th
+            Self.attempt(day: 4, hour: 9, .failed(.diskUnreachable(isNetworkDisk: true))),
+            Self.attempt(day: 3, hour: 9, .skipped(.notOnChosenNetwork)),
+            Self.attempt(day: 2, hour: 9, .skipped(.diskNotReachable)),
+            Self.attempt(day: 1, hour: 9, .paused),
+        ])
+        history.monitoringSince = Self.minutes(-20 * 24 * 60)
+        harness.system.storedHistory = history
+        harness.system.network = .none
+        var strips: [BackupStrip] = []
+
+        await harness.restart() // skipped: no network
+        strips.append(harness.scheduler.backupStrip)
+        harness.system.network = FakeSystem.home
+        harness.system.nextBackup = .lasting(minutes: 600)
+        harness.at(minutes: 70) { $0.backupProgress = BackupProgress(fraction: 0.5) }
+        await harness.advance(minutes: 75) // backing up
+        strips.append(harness.scheduler.backupStrip)
+
+        let kinds = Set(strips.flatMap { $0.slots.map(\.kind) }.map { "\($0)" })
+        #expect(kinds == ["backedUp", "failed", "skipped", "nothingDue", "nothingYet"])
+        #expect(strips.last?.slots.last?.caption.contains("backing up: 50") == true)
+        let texts = strips.flatMap { strip in
+            [strip.summary, strip.accessibilityLabel] + strip.slots.flatMap { [$0.caption, $0.accessibilityLabel] }
+        }
+        for name in ["Home", FakeSystem.homeRouter, "Private Disk Name", "/Volumes", "private-server-host"] {
+            #expect(!texts.contains { $0.localizedCaseInsensitiveContains(name) }, "\(name)")
+        }
+    }
+
     // MARK: When it shows
 
     @Test func hiddenUntilSetupAllowsBackupsOrABackupExists() async {
