@@ -28,12 +28,16 @@ public struct BackupStrip: Equatable, Sendable {
         /// What the slot says while hovered, e.g. "Wed 19 Nov: backed up 09:14". Never names a
         /// network, server or disk.
         public var caption: String
+        /// What VoiceOver reads for the slot's dot: the caption with its date written out in full,
+        /// e.g. "Wednesday 19 November: backed up 09:14".
+        public var accessibilityLabel: String
 
-        public init(start: Date, kind: Kind, isCurrent: Bool, caption: String) {
+        public init(start: Date, kind: Kind, isCurrent: Bool, caption: String, accessibilityLabel: String) {
             self.start = start
             self.kind = kind
             self.isCurrent = isCurrent
             self.caption = caption
+            self.accessibilityLabel = accessibilityLabel
         }
     }
 
@@ -43,6 +47,9 @@ public struct BackupStrip: Equatable, Sendable {
     public var summary: String
     /// Oldest first, ending with the current slot.
     public var slots: [Slot]
+
+    /// What VoiceOver reads for the strip as a whole: the summary.
+    public var accessibilityLabel: String { summary }
 
     public init(isShown: Bool, summary: String, slots: [Slot]) {
         self.isShown = isShown
@@ -75,31 +82,34 @@ struct BackupStripText {
         let unit = SlotUnit(interval.unit)
         let successes = self.successes
         let slotIntervals = slotIntervals(unit)
-        var slots = slotIntervals.enumerated().map { index, slot -> BackupStrip.Slot in
-            let start = slot.start, end = slot.end
+        var slots = slotIntervals.enumerated().map { index, slotInterval -> BackupStrip.Slot in
+            let start = slotInterval.start, end = slotInterval.end
             let isCurrent = index == slotIntervals.count - 1
             let latest = successes.last { $0 >= start && $0 < end }
-            let label = unit.label(start, format)
             if let latest {
-                return .init(start: start, kind: .backedUp, isCurrent: isCurrent,
-                             caption: "\(label): backed up \(format(latest, unit.backupTimeFormat))")
+                return slot(start, unit, .backedUp, isCurrent: isCurrent) { full in
+                    "backed up \(format(latest, unit.backupTimeFormat(full: full)))"
+                }
             }
             // With no success in the slot, the last success before any point in it is the last
             // one before it began, so a backup was due in the slot if that one's interval ran out
             // before the slot ended. With no success at all, one was due all along.
             let due = successes.last { $0 < start }.map { interval.date(after: $0, in: calendar) } ?? .distantPast
             guard due < end else {
-                return .init(start: start, kind: .nothingDue, isCurrent: isCurrent, caption: "\(label): nothing due")
+                return slot(start, unit, .nothingDue, isCurrent: isCurrent) { _ in "nothing due" }
             }
             if isCurrent {
-                return .init(start: start, kind: .nothingYet, isCurrent: true, caption: "\(label): nothing yet")
+                return slot(start, unit, .nothingYet, isCurrent: true) { _ in "nothing yet" }
             }
             let (kind, why) = missed(start: start, end: end)
-            return .init(start: start, kind: kind, isCurrent: false, caption: "\(label): \(why)")
+            return slot(start, unit, kind, isCurrent: false) { _ in why }
         }
         if isBackingUp, !slots.isEmpty {
-            // The same figure as the status line.
-            slots[slots.count - 1].caption = progress.map { "backing up: \($0.percentText)" } ?? "backing up"
+            // The same figure as the status line. It has no date to write out, so VoiceOver reads
+            // it as it is.
+            let caption = progress.map { "backing up: \($0.percentText)" } ?? "backing up"
+            slots[slots.count - 1].caption = caption
+            slots[slots.count - 1].accessibilityLabel = caption
         }
         let backedUp = slots.filter { $0.kind == .backedUp }.count
         return BackupStrip(
@@ -165,6 +175,19 @@ struct BackupStripText {
         return (timeMachineBackups + own + [history.lastSuccess].compactMap { $0 }).sorted()
     }
 
+    /// A slot saying `what` happened in it. The caption and VoiceOver's label say the same thing;
+    /// only the label writes dates out in full (`what` is given `full: true` for it).
+    private func slot(
+        _ start: Date, _ unit: SlotUnit, _ kind: BackupStrip.Slot.Kind, isCurrent: Bool,
+        _ what: (_ full: Bool) -> String
+    ) -> BackupStrip.Slot {
+        .init(
+            start: start, kind: kind, isCurrent: isCurrent,
+            caption: "\(unit.label(start, format, full: false)): \(what(false))",
+            accessibilityLabel: "\(unit.label(start, format, full: true)): \(what(true))"
+        )
+    }
+
     private func format(_ date: Date, _ format: String) -> String {
         Self.formatters.formatter(format, calendar: calendar).string(from: date)
     }
@@ -199,27 +222,39 @@ struct BackupStripText {
         var count: Int
         var plural: String
         var labelFormat: String
+        /// `labelFormat` written out in full, for VoiceOver.
+        var fullLabelFormat: String
         var labelPrefix = ""
         /// How a backup's time is given in a backed-up slot's caption.
         var backupTimeFormat: String
+        /// `backupTimeFormat` written out in full, for VoiceOver.
+        var fullBackupTimeFormat: String
 
         init(_ unit: BackupInterval.Unit) {
             switch unit {
             case .hours:
                 component = .hour; count = 24; plural = "hours"
-                labelFormat = "EEE d MMM HH:mm"; backupTimeFormat = "HH:mm"
+                labelFormat = "EEE d MMM HH:mm"; fullLabelFormat = "EEEE d MMMM HH:mm"
+                backupTimeFormat = "HH:mm"; fullBackupTimeFormat = "HH:mm"
             case .days:
                 component = .day; count = 14; plural = "days"
-                labelFormat = "EEE d MMM"; backupTimeFormat = "HH:mm"
+                labelFormat = "EEE d MMM"; fullLabelFormat = "EEEE d MMMM"
+                backupTimeFormat = "HH:mm"; fullBackupTimeFormat = "HH:mm"
             case .weeks:
                 component = .weekOfYear; count = 12; plural = "weeks"
-                labelFormat = "d MMM"; labelPrefix = "week of "; backupTimeFormat = "EEE d MMM HH:mm"
+                labelFormat = "d MMM"; fullLabelFormat = "d MMMM"; labelPrefix = "week of "
+                backupTimeFormat = "EEE d MMM HH:mm"; fullBackupTimeFormat = "EEEE d MMMM HH:mm"
             }
         }
 
-        /// "Tue 18 Nov 14:00", "Tue 18 Nov" or "week of 17 Nov".
-        func label(_ start: Date, _ format: (Date, String) -> String) -> String {
-            labelPrefix + format(start, labelFormat)
+        /// "Tue 18 Nov 14:00", "Tue 18 Nov" or "week of 17 Nov"; in full, "Tuesday 18 November 14:00",
+        /// "Tuesday 18 November" or "week of 17 November".
+        func label(_ start: Date, _ format: (Date, String) -> String, full: Bool) -> String {
+            labelPrefix + format(start, full ? fullLabelFormat : labelFormat)
+        }
+
+        func backupTimeFormat(full: Bool) -> String {
+            full ? fullBackupTimeFormat : backupTimeFormat
         }
     }
 }

@@ -281,6 +281,39 @@ struct BackupStripTests {
         #expect(harness.scheduler.backupStrip.slots.last?.isCurrent == true)
     }
 
+    // MARK: VoiceOver
+
+    @Test func voiceOverReadsEachDotsCaptionWrittenOutInFullAndTheSummaryForTheStrip() async {
+        let harness = harnessWithNetworkDisk(snapshots: [
+            Self.minutes(-2 * 24 * 60 + 9 * 60 + 14), // Tue 30 Dec 09:14
+        ])
+        harness.system.nextBackup = .fails(result: 19)
+
+        await harness.start()
+
+        let strip = harness.scheduler.backupStrip
+        #expect(strip.accessibilityLabel == "Backed up 1 of the last 14 days")
+        #expect(strip.slots.map(\.accessibilityLabel).first == "Friday 19 December: before BackMeUp was set up")
+        #expect(strip.slots.map(\.accessibilityLabel).suffix(3) == [
+            "Tuesday 30 December: backed up 09:14",
+            "Wednesday 31 December: before BackMeUp was set up",
+            "Thursday 1 January: nothing yet",
+        ])
+    }
+
+    @Test func voiceOverWritesOutHourAndWeekSlotsInFullToo() async {
+        let harness = harnessWithNetworkDisk()
+        await harness.start() // backs up 00:00 to 00:20
+
+        harness.changeSettings { $0.backupInterval = .init(count: 3, unit: .hours) }
+        #expect(harness.scheduler.backupStrip.slots.last?.accessibilityLabel == "Thursday 1 January 00:00: backed up 00:20")
+
+        harness.changeSettings { $0.backupInterval = .init(count: 1, unit: .weeks) }
+        #expect(harness.scheduler.backupStrip.slots.last?.accessibilityLabel
+            == "week of 28 December: backed up Thursday 1 January 00:20")
+        #expect(harness.scheduler.backupStrip.accessibilityLabel == "Backed up 1 of the last 12 weeks")
+    }
+
     // MARK: Why a slot was missed
 
     /// A network disk whose history BackMeUp has kept since Fri 12 Dec, before the strip begins,
@@ -403,6 +436,7 @@ struct BackupStripTests {
         #expect(harness.statusLine.contains("35.2%"))
         #expect(harness.scheduler.backupStrip.slots.last?.caption == "backing up: 35.2%")
         #expect(harness.scheduler.backupStrip.slots.last?.isCurrent == true)
+        #expect(harness.scheduler.backupStrip.slots.last?.accessibilityLabel == "backing up: 35.2%")
     }
 
     // MARK: How long reasons are kept
