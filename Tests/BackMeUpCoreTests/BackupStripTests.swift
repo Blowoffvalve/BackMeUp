@@ -9,8 +9,9 @@ struct BackupStripTests {
     static let networkDisk = DestinationInfo.configured(Destination(kind: .network, id: "network-id"))
 
     /// A network disk with no backups on it yet. The harness starts at Thu 1 Jan 2026 00:00 UTC.
-    func harnessWithNetworkDisk(snapshots: [Date] = []) -> SchedulerHarness {
-        let harness = SchedulerHarness()
+    func harnessWithNetworkDisk(snapshots: [Date] = [], calendar: Calendar = SchedulerHarness.utcCalendar,
+                                startingAt start: Date = SchedulerHarness.startDate) -> SchedulerHarness {
+        let harness = SchedulerHarness(startingAt: start, calendar: calendar)
         harness.system.destinationInfo = Self.networkDisk
         harness.system.preferences = TimeMachinePreferences(autoBackup: false, destinations: [
             .init(id: "network-id", encryption: .encrypted, result: 0, snapshotDates: snapshots),
@@ -87,6 +88,107 @@ struct BackupStripTests {
 
         #expect(captions(harness).suffix(2) == ["Wed 31 Dec: before BackMeUp was set up", "Thu 1 Jan: nothing yet"])
         #expect(captions(harness).suffix(3).first == "Tue 30 Dec: backed up 01:00")
+    }
+
+    // MARK: Slot unit
+
+    @Test func withAnIntervalInHoursEachSlotIsAnHourEvenEverySixHours() async {
+        let harness = harnessWithNetworkDisk()
+        harness.system.storedSettings = BackupSettings(backupInterval: .init(count: 6, unit: .hours), retryMinutes: 60)
+        await harness.restart() // backs up 00:00 to 00:20
+
+        await harness.advance(minutes: 3 * 60 + 30)
+
+        let strip = harness.scheduler.backupStrip
+        #expect(strip.slots.count == 24)
+        #expect(strip.slots.first?.caption == "Wed 31 Dec 04:00: before BackMeUp was set up")
+        #expect(captions(harness).suffix(4) == [
+            "Thu 1 Jan 00:00: backed up 00:20",
+            "Thu 1 Jan 01:00: nothing due",
+            "Thu 1 Jan 02:00: nothing due",
+            "Thu 1 Jan 03:00: nothing due",
+        ])
+        #expect(strip.slots.last?.isCurrent == true)
+        #expect(strip.summary == "Backed up 1 of the last 24 hours")
+    }
+
+    /// Weeks start on the region's first weekday: Monday in the UK, Sunday in the US.
+    @Test(arguments: [
+        ("en_GB", "week of 13 Oct", "week of 29 Dec"),
+        ("en_US", "week of 12 Oct", "week of 28 Dec"),
+    ])
+    func withAnIntervalInWeeksEachSlotIsAWeekFromTheRegionsFirstWeekday(
+        region: String, firstWeek: String, thisWeek: String
+    ) async {
+        var calendar = SchedulerHarness.utcCalendar
+        calendar.locale = Locale(identifier: region)
+        let saturday = Self.minutes(-5 * 24 * 60 + 9 * 60 + 14) // Sat 27 Dec 09:14
+        let harness = harnessWithNetworkDisk(snapshots: [saturday], calendar: calendar)
+        harness.system.storedSettings = BackupSettings(backupInterval: .init(count: 2, unit: .weeks), retryMinutes: 60)
+        harness.system.nextBackup = .fails(result: 19)
+
+        await harness.restart()
+
+        let strip = harness.scheduler.backupStrip
+        #expect(strip.slots.count == 12)
+        #expect(strip.slots.first?.caption == "\(firstWeek): before BackMeUp was set up")
+        #expect(strip.slots.last?.caption == "\(thisWeek): nothing due")
+        #expect(strip.slots.last?.isCurrent == true)
+        #expect(captions(harness).suffix(2).first?.hasSuffix(": backed up Sat 27 Dec 09:14") == true)
+        #expect(strip.summary == "Backed up 1 of the last 12 weeks")
+    }
+
+    /// The UK's clocks go back an hour at 02:00 on Sun 25 Oct 2026, so 01:00 comes twice.
+    @Test func hourSlotsKeepEveryHourWhenTheClocksGoBack() async {
+        let harness = harnessWithNetworkDisk(calendar: Self.london, startingAt: Self.utc("2026-10-25T06:30:00Z"))
+        harness.system.storedSettings = BackupSettings(backupInterval: .init(count: 1, unit: .hours), retryMinutes: 60)
+        harness.system.nextBackup = .fails(result: 19)
+
+        await harness.restart()
+
+        let slots = harness.scheduler.backupStrip.slots
+        #expect(slots.count == 24)
+        #expect(slots.first?.start == Self.utc("2026-10-24T07:00:00Z"))
+        #expect(zip(slots, slots.dropFirst()).allSatisfy { $1.start.timeIntervalSince($0.start) == 3600 })
+        #expect(captions(harness).suffix(8) == [
+            "Sun 25 Oct 00:00", "Sun 25 Oct 01:00", "Sun 25 Oct 01:00", "Sun 25 Oct 02:00",
+            "Sun 25 Oct 03:00", "Sun 25 Oct 04:00", "Sun 25 Oct 05:00",
+        ].map { "\($0): before BackMeUp was set up" } + ["Sun 25 Oct 06:00: nothing yet"])
+    }
+
+    /// The UK's clocks go forward an hour at 01:00 on Sun 29 Mar 2026, making that day 23 hours.
+    @Test func daySlotsKeepEveryDayWhenTheClocksGoForward() async {
+        let lateOnTheShortDay = Self.utc("2026-03-29T22:30:00Z") // 23:30 in the UK
+        let harness = harnessWithNetworkDisk(snapshots: [lateOnTheShortDay], calendar: Self.london,
+                                             startingAt: Self.utc("2026-04-01T12:00:00Z"))
+        harness.system.nextBackup = .fails(result: 19)
+
+        await harness.restart()
+
+        #expect(captions(harness) == [
+            "Thu 19 Mar", "Fri 20 Mar", "Sat 21 Mar", "Sun 22 Mar", "Mon 23 Mar", "Tue 24 Mar", "Wed 25 Mar",
+            "Thu 26 Mar", "Fri 27 Mar", "Sat 28 Mar",
+        ].map { "\($0): before BackMeUp was set up" } + [
+            "Sun 29 Mar: backed up 23:30",
+            "Mon 30 Mar: before BackMeUp was set up",
+            "Tue 31 Mar: before BackMeUp was set up",
+            "Wed 1 Apr: nothing yet",
+        ])
+    }
+
+    @Test func changingTheIntervalSwitchesTheStripStraightAway() async {
+        let harness = harnessWithNetworkDisk()
+        await harness.start() // backs up 00:00 to 00:20
+        #expect(harness.scheduler.backupStrip.slots.count == 14)
+
+        harness.changeSettings { $0.backupInterval = .init(count: 3, unit: .hours) }
+        #expect(harness.scheduler.backupStrip.slots.count == 24)
+        #expect(harness.scheduler.backupStrip.slots.last?.caption == "Thu 1 Jan 00:00: backed up 00:20")
+        #expect(harness.scheduler.backupStrip.summary == "Backed up 1 of the last 24 hours")
+
+        harness.changeSettings { $0.backupInterval = .init(count: 1, unit: .weeks) }
+        #expect(harness.scheduler.backupStrip.slots.last?.caption == "week of 28 Dec: backed up Thu 1 Jan 00:20")
+        #expect(harness.scheduler.backupStrip.summary == "Backed up 1 of the last 12 weeks")
     }
 
     // MARK: Nothing due versus missed
@@ -173,9 +275,9 @@ struct BackupStripTests {
             "Thu 1 Jan: nothing yet",
         ])
 
-        harness.changeSettings { $0.backupInterval = BackupInterval(count: 1, unit: .weeks) }
-        #expect(captions(harness).suffix(1) == ["Thu 1 Jan: nothing due"])
-        #expect(harness.scheduler.backupStrip.slots.last?.kind == .nothingDue)
+        harness.changeSettings { $0.backupInterval = BackupInterval(count: 4, unit: .hours) }
+        #expect(captions(harness).suffix(1) == ["Thu 1 Jan 00:00: nothing yet"])
+        #expect(harness.scheduler.backupStrip.slots.last?.kind == .nothingYet)
         #expect(harness.scheduler.backupStrip.slots.last?.isCurrent == true)
     }
 
@@ -344,6 +446,16 @@ struct BackupStripTests {
     /// Minutes after the harness's start date, Thu 1 Jan 2026 00:00 UTC.
     static func minutes(_ minutes: Double) -> Date {
         SchedulerHarness.startDate.addingTimeInterval(minutes * 60)
+    }
+
+    static var london: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/London")!
+        return calendar
+    }
+
+    static func utc(_ string: String) -> Date {
+        ISO8601DateFormatter().date(from: string)!
     }
 
     func captions(_ harness: SchedulerHarness) -> [String] {

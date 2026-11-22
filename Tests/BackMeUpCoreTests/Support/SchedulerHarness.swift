@@ -11,7 +11,7 @@ import Testing
 /// on by the backup's scripted duration. A backup scripted with `.lasting(minutes:)` instead keeps
 /// running while the harness moves the clock, and ends at the first step at or after its end.
 ///
-/// Dates in the menu are formatted in UTC, so "today" is the UTC day of `system.now`.
+/// Dates in the menu are formatted in UTC unless a test passes its own calendar, so "today" is the UTC day of `system.now`.
 @MainActor
 final class SchedulerHarness {
     static let startDate = Date(timeIntervalSince1970: 1_767_225_600) // 2026-01-01 00:00 UTC
@@ -19,12 +19,15 @@ final class SchedulerHarness {
     let system: FakeSystem
     private(set) var scheduler: Scheduler
     let startDate: Date
+    /// The scheduler's calendar: Gregorian in UTC unless a test needs a region or time zone.
+    let calendar: Calendar
     private var scripted: [(at: Date, change: (FakeSystem) -> Void)] = []
 
-    init(startingAt start: Date = startDate) {
+    init(startingAt start: Date = startDate, calendar: Calendar = utcCalendar) {
         startDate = start
+        self.calendar = calendar
         system = FakeSystem(now: start)
-        scheduler = Self.makeScheduler(system)
+        scheduler = Self.makeScheduler(system, calendar: calendar)
         watchChecklist()
     }
 
@@ -35,10 +38,14 @@ final class SchedulerHarness {
         scheduler.onShowChecklist = { [unowned self] in checklistShown += 1 }
     }
 
-    private static func makeScheduler(_ system: FakeSystem) -> Scheduler {
+    static var utcCalendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "UTC")!
-        return Scheduler(system: system, calendar: calendar)
+        return calendar
+    }
+
+    private static func makeScheduler(_ system: FakeSystem, calendar: Calendar) -> Scheduler {
+        Scheduler(system: system, calendar: calendar)
     }
 
     var statusLine: String { scheduler.statusLine }
@@ -64,7 +71,7 @@ final class SchedulerHarness {
 
     /// Quits and relaunches the app: a new Scheduler over the same outside world and storage.
     func restart() async {
-        scheduler = Self.makeScheduler(system)
+        scheduler = Self.makeScheduler(system, calendar: calendar)
         watchChecklist()
         await start()
     }
