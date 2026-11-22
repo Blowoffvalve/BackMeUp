@@ -98,11 +98,13 @@ struct BackupStripText {
             guard due < end else {
                 return slot(start, unit, .nothingDue, isCurrent: isCurrent) { _ in "nothing due" }
             }
-            if isCurrent {
+            let (kind, why) = missed(start: start, end: end)
+            // The current slot shows a failure straight away, but isn't missed while a backup is
+            // still due later in it.
+            if isCurrent, kind != .failed {
                 return slot(start, unit, .nothingYet, isCurrent: true) { _ in "nothing yet" }
             }
-            let (kind, why) = missed(start: start, end: end)
-            return slot(start, unit, kind, isCurrent: false) { _ in why }
+            return slot(start, unit, kind, isCurrent: isCurrent) { _ in why }
         }
         if isBackingUp, !slots.isEmpty {
             // The same figure as the status line. It has no date to write out, so VoiceOver reads

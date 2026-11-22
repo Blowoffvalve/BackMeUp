@@ -48,7 +48,7 @@ struct BackupStripTests {
         #expect(captions(harness).suffix(3) == [
             "Tue 30 Dec: backed up 09:14",
             "Wed 31 Dec: backed up 23:59",
-            "Thu 1 Jan: nothing yet",
+            "Thu 1 Jan: failed, Time Machine reported error 19",
         ])
         #expect(harness.scheduler.backupStrip.summary == "Backed up 2 of the last 14 days")
     }
@@ -153,7 +153,7 @@ struct BackupStripTests {
         #expect(captions(harness).suffix(8) == [
             "Sun 25 Oct 00:00", "Sun 25 Oct 01:00", "Sun 25 Oct 01:00", "Sun 25 Oct 02:00",
             "Sun 25 Oct 03:00", "Sun 25 Oct 04:00", "Sun 25 Oct 05:00",
-        ].map { "\($0): before BackMeUp was set up" } + ["Sun 25 Oct 06:00: nothing yet"])
+        ].map { "\($0): before BackMeUp was set up" } + ["Sun 25 Oct 06:00: failed, Time Machine reported error 19"])
     }
 
     /// The UK's clocks go forward an hour at 01:00 on Sun 29 Mar 2026, making that day 23 hours.
@@ -172,7 +172,7 @@ struct BackupStripTests {
             "Sun 29 Mar: backed up 23:30",
             "Mon 30 Mar: before BackMeUp was set up",
             "Tue 31 Mar: before BackMeUp was set up",
-            "Wed 1 Apr: nothing yet",
+            "Wed 1 Apr: failed, Time Machine reported error 19",
         ])
     }
 
@@ -211,10 +211,10 @@ struct BackupStripTests {
             "Tue 30 Dec: nothing due",
             "Wed 31 Dec: nothing due",
             "Thu 1 Jan: failed, Time Machine reported error 19",
-            "Fri 2 Jan: nothing yet",
+            "Fri 2 Jan: failed, Time Machine reported error 19",
         ])
         #expect(harness.scheduler.backupStrip.slots.suffix(5).map(\.kind) == [
-            .backedUp, .nothingDue, .nothingDue, .failed, .nothingYet,
+            .backedUp, .nothingDue, .nothingDue, .failed, .failed,
         ])
         #expect(harness.scheduler.backupStrip.summary == "Backed up 1 of the last 14 days")
     }
@@ -230,20 +230,44 @@ struct BackupStripTests {
         #expect(captions(harness).suffix(3) == [
             "Tue 30 Dec: backed up 23:00",
             "Wed 31 Dec: before BackMeUp was set up",
-            "Thu 1 Jan: nothing yet",
+            "Thu 1 Jan: failed, Time Machine reported error 19",
         ])
     }
 
-    /// The current slot isn't missed while a backup is still due later in it.
+    /// The current slot isn't missed while a backup is still due later in it, even if one was
+    /// skipped.
     @Test func theCurrentSlotSaysNothingYetUntilABackupLands() async {
+        let harness = harnessWithNetworkDisk(snapshots: [
+            Self.minutes(-15 * 60), // Wed 31 Dec 09:00
+        ])
+        harness.system.network = .none
+
+        await harness.start() // skipped: not on a network
+        #expect(harness.system.startedBackups.isEmpty)
+        #expect(harness.scheduler.backupStrip.slots.last?.caption == "Thu 1 Jan: nothing yet")
+        #expect(harness.scheduler.backupStrip.slots.last?.kind == .nothingYet)
+        #expect(harness.scheduler.backupStrip.summary == "Backed up 1 of the last 14 days")
+
+        harness.at(minutes: 30) { $0.network = FakeSystem.home }
+        await harness.advance(minutes: 2 * 60)
+
+        #expect(harness.scheduler.backupStrip.slots.last?.caption.hasPrefix("Thu 1 Jan: backed up ") == true)
+        #expect(harness.scheduler.backupStrip.slots.last?.kind == .backedUp)
+        #expect(harness.scheduler.backupStrip.summary == "Backed up 2 of the last 14 days")
+    }
+
+    /// A failure shows in the current slot straight away, not only once the slot has passed.
+    @Test func aFailureInTheCurrentSlotShowsStraightAway() async {
         let harness = harnessWithNetworkDisk(snapshots: [
             Self.minutes(-15 * 60), // Wed 31 Dec 09:00
         ])
         harness.system.nextBackup = .fails(result: 19)
 
         await harness.start() // fails 00:00 to 00:20
-        #expect(harness.scheduler.backupStrip.slots.last?.caption == "Thu 1 Jan: nothing yet")
-        #expect(harness.scheduler.backupStrip.slots.last?.kind == .nothingYet)
+        #expect(harness.scheduler.backupStrip.slots.last?.caption == "Thu 1 Jan: failed, Time Machine reported error 19")
+        #expect(harness.scheduler.backupStrip.slots.last?.accessibilityLabel
+            == "Thursday 1 January: failed, Time Machine reported error 19")
+        #expect(harness.scheduler.backupStrip.slots.last?.kind == .failed)
         #expect(harness.scheduler.backupStrip.summary == "Backed up 1 of the last 14 days")
 
         harness.system.nextBackup = .succeeds
@@ -265,19 +289,27 @@ struct BackupStripTests {
             "Mon 29 Dec: backed up 09:00",
             "Tue 30 Dec: before BackMeUp was set up",
             "Wed 31 Dec: before BackMeUp was set up",
-            "Thu 1 Jan: nothing yet",
+            "Thu 1 Jan: failed, Time Machine reported error 19",
         ])
 
         harness.changeSettings { $0.backupInterval = BackupInterval(count: 3, unit: .days) }
         #expect(captions(harness).suffix(3) == [
             "Tue 30 Dec: nothing due",
             "Wed 31 Dec: nothing due",
-            "Thu 1 Jan: nothing yet",
+            "Thu 1 Jan: failed, Time Machine reported error 19",
         ])
 
         harness.changeSettings { $0.backupInterval = BackupInterval(count: 4, unit: .hours) }
-        #expect(captions(harness).suffix(1) == ["Thu 1 Jan 00:00: nothing yet"])
-        #expect(harness.scheduler.backupStrip.slots.last?.kind == .nothingYet)
+        #expect(captions(harness).suffix(1) == ["Thu 1 Jan 00:00: failed, Time Machine reported error 19"])
+        #expect(harness.scheduler.backupStrip.slots.last?.kind == .failed)
+        #expect(harness.scheduler.backupStrip.slots.last?.isCurrent == true)
+
+        // A week slot ends a week after it starts, so with a weekly interval a backup is due in
+        // every week slot without one: the recent backup counts for this week, and the failure
+        // after it doesn't make the week a failed one.
+        harness.changeSettings { $0.backupInterval = BackupInterval(count: 1, unit: .weeks) }
+        #expect(captions(harness).suffix(1) == ["week of 28 Dec: backed up Mon 29 Dec 09:00"])
+        #expect(harness.scheduler.backupStrip.slots.last?.kind == .backedUp)
         #expect(harness.scheduler.backupStrip.slots.last?.isCurrent == true)
     }
 
@@ -297,7 +329,7 @@ struct BackupStripTests {
         #expect(strip.slots.map(\.accessibilityLabel).suffix(3) == [
             "Tuesday 30 December: backed up 09:14",
             "Wednesday 31 December: before BackMeUp was set up",
-            "Thursday 1 January: nothing yet",
+            "Thursday 1 January: failed, Time Machine reported error 19",
         ])
     }
 
