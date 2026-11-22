@@ -28,7 +28,7 @@ struct BackupStripTests {
         let strip = harness.scheduler.backupStrip
         #expect(strip.isShown)
         #expect(strip.slots.count == 14)
-        #expect(strip.slots.first?.caption == "Fri 19 Dec: not backed up")
+        #expect(strip.slots.first?.caption == "Fri 19 Dec: missed")
         #expect(strip.slots.last?.caption == "Thu 1 Jan: backed up 00:20")
         #expect(strip.slots.map(\.kind) == Array(repeating: .skipped, count: 13) + [.backedUp])
         #expect(strip.slots.map(\.isCurrent) == Array(repeating: false, count: 13) + [true])
@@ -48,7 +48,7 @@ struct BackupStripTests {
         #expect(captions(harness).suffix(3) == [
             "Tue 30 Dec: backed up 09:14",
             "Wed 31 Dec: backed up 23:59",
-            "Thu 1 Jan: not backed up",
+            "Thu 1 Jan: nothing yet",
         ])
         #expect(harness.scheduler.backupStrip.summary == "Backed up 2 of the last 14 days")
     }
@@ -66,8 +66,8 @@ struct BackupStripTests {
 
         #expect(captions(harness).suffix(4) == [
             "Mon 29 Dec: backed up 08:00",
-            "Tue 30 Dec: not backed up",
-            "Wed 31 Dec: not backed up",
+            "Tue 30 Dec: missed",
+            "Wed 31 Dec: missed",
             "Thu 1 Jan: backed up 00:20",
         ])
     }
@@ -86,7 +86,7 @@ struct BackupStripTests {
         await harness.start()
         await harness.scheduler.chooseDisk(id: "network-id")
 
-        #expect(captions(harness).suffix(2) == ["Wed 31 Dec: not backed up", "Thu 1 Jan: not backed up"])
+        #expect(captions(harness).suffix(2) == ["Wed 31 Dec: missed", "Thu 1 Jan: nothing yet"])
         #expect(captions(harness).suffix(3).first == "Tue 30 Dec: backed up 01:00")
     }
 
@@ -101,12 +101,12 @@ struct BackupStripTests {
 
         let strip = harness.scheduler.backupStrip
         #expect(strip.slots.count == 24)
-        #expect(strip.slots.first?.caption == "Wed 31 Dec 04:00: not backed up")
+        #expect(strip.slots.first?.caption == "Wed 31 Dec 04:00: missed")
         #expect(captions(harness).suffix(4) == [
             "Thu 1 Jan 00:00: backed up 00:20",
-            "Thu 1 Jan 01:00: not backed up",
-            "Thu 1 Jan 02:00: not backed up",
-            "Thu 1 Jan 03:00: not backed up",
+            "Thu 1 Jan 01:00: nothing due",
+            "Thu 1 Jan 02:00: nothing due",
+            "Thu 1 Jan 03:00: nothing due",
         ])
         #expect(strip.slots.last?.isCurrent == true)
         #expect(strip.summary == "Backed up 1 of the last 24 hours")
@@ -131,8 +131,8 @@ struct BackupStripTests {
 
         let strip = harness.scheduler.backupStrip
         #expect(strip.slots.count == 12)
-        #expect(strip.slots.first?.caption == "\(firstWeek): not backed up")
-        #expect(strip.slots.last?.caption == "\(thisWeek): not backed up")
+        #expect(strip.slots.first?.caption == "\(firstWeek): missed")
+        #expect(strip.slots.last?.caption == "\(thisWeek): nothing due")
         #expect(strip.slots.last?.isCurrent == true)
         #expect(captions(harness).suffix(2).first?.hasSuffix(": backed up Sat 27 Dec 09:14") == true)
         #expect(strip.summary == "Backed up 1 of the last 12 weeks")
@@ -152,8 +152,8 @@ struct BackupStripTests {
         #expect(zip(slots, slots.dropFirst()).allSatisfy { $1.start.timeIntervalSince($0.start) == 3600 })
         #expect(captions(harness).suffix(8) == [
             "Sun 25 Oct 00:00", "Sun 25 Oct 01:00", "Sun 25 Oct 01:00", "Sun 25 Oct 02:00",
-            "Sun 25 Oct 03:00", "Sun 25 Oct 04:00", "Sun 25 Oct 05:00", "Sun 25 Oct 06:00",
-        ].map { "\($0): not backed up" })
+            "Sun 25 Oct 03:00", "Sun 25 Oct 04:00", "Sun 25 Oct 05:00",
+        ].map { "\($0): missed" } + ["Sun 25 Oct 06:00: nothing yet"])
     }
 
     /// The UK's clocks go forward an hour at 01:00 on Sun 29 Mar 2026, making that day 23 hours.
@@ -168,11 +168,11 @@ struct BackupStripTests {
         #expect(captions(harness) == [
             "Thu 19 Mar", "Fri 20 Mar", "Sat 21 Mar", "Sun 22 Mar", "Mon 23 Mar", "Tue 24 Mar", "Wed 25 Mar",
             "Thu 26 Mar", "Fri 27 Mar", "Sat 28 Mar",
-        ].map { "\($0): not backed up" } + [
+        ].map { "\($0): missed" } + [
             "Sun 29 Mar: backed up 23:30",
-            "Mon 30 Mar: not backed up",
-            "Tue 31 Mar: not backed up",
-            "Wed 1 Apr: not backed up",
+            "Mon 30 Mar: missed",
+            "Tue 31 Mar: missed",
+            "Wed 1 Apr: nothing yet",
         ])
     }
 
@@ -189,6 +189,96 @@ struct BackupStripTests {
         harness.changeSettings { $0.backupInterval = .init(count: 1, unit: .weeks) }
         #expect(harness.scheduler.backupStrip.slots.last?.caption == "week of 28 Dec: backed up Thu 1 Jan 00:20")
         #expect(harness.scheduler.backupStrip.summary == "Backed up 1 of the last 12 weeks")
+    }
+
+    // MARK: Nothing due versus missed
+
+    /// Every 3 days with a backup on Monday: Tuesday and Wednesday had nothing due, and Thursday
+    /// is missed once it passes without a backup.
+    @Test func everyThreeDaysTheDaysBetweenBackupsHadNothingDue() async {
+        let harness = harnessWithNetworkDisk(snapshots: [
+            Self.minutes(-3 * 24 * 60 + 9 * 60), // Mon 29 Dec 09:00
+        ])
+        harness.changeSettings { $0.backupInterval = BackupInterval(count: 3, unit: .days) }
+        harness.system.nextBackup = .fails(result: 19)
+
+        await harness.start()
+        await harness.advance(minutes: 24 * 60 + 60) // Fri 2 Jan 01:00
+
+        #expect(captions(harness).suffix(6) == [
+            "Sun 28 Dec: missed",
+            "Mon 29 Dec: backed up 09:00",
+            "Tue 30 Dec: nothing due",
+            "Wed 31 Dec: nothing due",
+            "Thu 1 Jan: missed",
+            "Fri 2 Jan: nothing yet",
+        ])
+        #expect(harness.scheduler.backupStrip.slots.suffix(5).map(\.kind) == [
+            .backedUp, .nothingDue, .nothingDue, .skipped, .nothingYet,
+        ])
+        #expect(harness.scheduler.backupStrip.summary == "Backed up 1 of the last 14 days")
+    }
+
+    @Test func everyDayADayWithoutABackupAfterOneWithABackupIsMissed() async {
+        let harness = harnessWithNetworkDisk(snapshots: [
+            Self.minutes(-2 * 24 * 60 + 23 * 60), // Tue 30 Dec 23:00
+        ])
+        harness.system.nextBackup = .fails(result: 19)
+
+        await harness.start()
+
+        #expect(captions(harness).suffix(3) == [
+            "Tue 30 Dec: backed up 23:00",
+            "Wed 31 Dec: missed",
+            "Thu 1 Jan: nothing yet",
+        ])
+    }
+
+    /// The current slot isn't missed while a backup is still due later in it.
+    @Test func theCurrentSlotSaysNothingYetUntilABackupLands() async {
+        let harness = harnessWithNetworkDisk(snapshots: [
+            Self.minutes(-15 * 60), // Wed 31 Dec 09:00
+        ])
+        harness.system.nextBackup = .fails(result: 19)
+
+        await harness.start() // fails 00:00 to 00:20
+        #expect(harness.scheduler.backupStrip.slots.last?.caption == "Thu 1 Jan: nothing yet")
+        #expect(harness.scheduler.backupStrip.slots.last?.kind == .nothingYet)
+        #expect(harness.scheduler.backupStrip.summary == "Backed up 1 of the last 14 days")
+
+        harness.system.nextBackup = .succeeds
+        await harness.advance(minutes: 2 * 60) // retries 01:20 to 01:40
+
+        #expect(harness.scheduler.backupStrip.slots.last?.caption == "Thu 1 Jan: backed up 01:40")
+        #expect(harness.scheduler.backupStrip.slots.last?.kind == .backedUp)
+        #expect(harness.scheduler.backupStrip.summary == "Backed up 2 of the last 14 days")
+    }
+
+    @Test func changingTheIntervalRejudgesPastSlots() async {
+        let harness = harnessWithNetworkDisk(snapshots: [
+            Self.minutes(-3 * 24 * 60 + 9 * 60), // Mon 29 Dec 09:00
+        ])
+        harness.system.nextBackup = .fails(result: 19)
+
+        await harness.start()
+        #expect(captions(harness).suffix(4) == [
+            "Mon 29 Dec: backed up 09:00",
+            "Tue 30 Dec: missed",
+            "Wed 31 Dec: missed",
+            "Thu 1 Jan: nothing yet",
+        ])
+
+        harness.changeSettings { $0.backupInterval = BackupInterval(count: 3, unit: .days) }
+        #expect(captions(harness).suffix(3) == [
+            "Tue 30 Dec: nothing due",
+            "Wed 31 Dec: nothing due",
+            "Thu 1 Jan: nothing yet",
+        ])
+
+        harness.changeSettings { $0.backupInterval = BackupInterval(count: 4, unit: .hours) }
+        #expect(captions(harness).suffix(1) == ["Thu 1 Jan 00:00: nothing yet"])
+        #expect(harness.scheduler.backupStrip.slots.last?.kind == .nothingYet)
+        #expect(harness.scheduler.backupStrip.slots.last?.isCurrent == true)
     }
 
     // MARK: When it shows

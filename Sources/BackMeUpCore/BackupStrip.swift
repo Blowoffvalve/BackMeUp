@@ -9,8 +9,12 @@ public struct BackupStrip: Equatable, Sendable {
         public enum Kind: Equatable, Sendable {
             /// ● A backup was made in the slot.
             case backedUp
-            /// ○ No backup was made in the slot.
+            /// ○ A backup was due in the slot but none was made.
             case skipped
+            /// · No backup was made, and none was due: the last one was recent enough throughout.
+            case nothingDue
+            /// The current slot, with no backup yet but one still due later in it. Not missed yet.
+            case nothingYet
         }
 
         /// When the slot begins, by the scheduler's calendar.
@@ -50,10 +54,11 @@ public struct BackupStrip: Equatable, Sendable {
 /// Works out the strip from what the scheduler knows. Pure, like `MenuText`.
 struct BackupStripText {
     var history: BackupHistory
+    /// Today's interval. Every slot is judged by it, even ones from before it was changed. Its unit
+    /// sets the slots' size and number.
+    var interval: BackupInterval
     /// When each backup Time Machine still has on the chosen disk was made (its `SnapshotDates`).
     var timeMachineBackups: [Date]
-    /// The backup interval's unit, which sets the slots' size and number.
-    var intervalUnit: BackupInterval.Unit
     /// Whether there's anything worth showing yet; see `BackupStrip.hidden`.
     var isShown: Bool
     var now: Date
@@ -61,19 +66,29 @@ struct BackupStripText {
 
     var strip: BackupStrip {
         guard isShown else { return .hidden }
-        let unit = SlotUnit(intervalUnit)
+        let unit = SlotUnit(interval.unit)
         let successes = self.successes
-        let intervals = slotIntervals(unit)
-        let slots = intervals.enumerated().map { index, interval -> BackupStrip.Slot in
-            let start = interval.start
-            let isCurrent = index == intervals.count - 1
-            let latest = successes.last { $0 >= start && $0 < interval.end }
+        let slotIntervals = slotIntervals(unit)
+        let slots = slotIntervals.enumerated().map { index, slot -> BackupStrip.Slot in
+            let start = slot.start, end = slot.end
+            let isCurrent = index == slotIntervals.count - 1
+            let latest = successes.last { $0 >= start && $0 < end }
             let label = unit.label(start, format)
             if let latest {
                 return .init(start: start, kind: .backedUp, isCurrent: isCurrent,
                              caption: "\(label): backed up \(format(latest, unit.backupTimeFormat))")
             }
-            return .init(start: start, kind: .skipped, isCurrent: isCurrent, caption: "\(label): not backed up")
+            // With no success in the slot, the last success before any point in it is the last
+            // one before it began, so a backup was due in the slot if that one's interval ran out
+            // before the slot ended. With no success at all, one was due all along.
+            let due = successes.last { $0 < start }.map { interval.date(after: $0, in: calendar) } ?? .distantPast
+            guard due < end else {
+                return .init(start: start, kind: .nothingDue, isCurrent: isCurrent, caption: "\(label): nothing due")
+            }
+            if isCurrent {
+                return .init(start: start, kind: .nothingYet, isCurrent: true, caption: "\(label): nothing yet")
+            }
+            return .init(start: start, kind: .skipped, isCurrent: false, caption: "\(label): missed")
         }
         let backedUp = slots.filter { $0.kind == .backedUp }.count
         return BackupStrip(
