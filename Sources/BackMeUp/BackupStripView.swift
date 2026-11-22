@@ -106,6 +106,19 @@ final class BackupStripView: NSView {
             switch slot.kind {
             case .backedUp:
                 NSBezierPath(ovalIn: dot).fill()
+            case .failed:
+                // The only coloured shape.
+                let cross = NSBezierPath()
+                let box = dot.insetBy(dx: 0.5, dy: 0.5)
+                cross.move(to: NSPoint(x: box.minX, y: box.minY))
+                cross.line(to: NSPoint(x: box.maxX, y: box.maxY))
+                cross.move(to: NSPoint(x: box.minX, y: box.maxY))
+                cross.line(to: NSPoint(x: box.maxX, y: box.minY))
+                cross.lineWidth = 1.75
+                cross.lineCapStyle = .round
+                NSColor.systemRed.set()
+                cross.stroke()
+                color.set()
             case .skipped:
                 let path = NSBezierPath(ovalIn: dot.insetBy(dx: 0.75, dy: 0.75))
                 path.lineWidth = 1.5
