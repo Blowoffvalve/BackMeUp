@@ -29,6 +29,8 @@ public final class Scheduler {
     public private(set) var statusLine = ""
     /// The menu's second line: when the next backup is planned.
     public private(set) var nextBackupLine = ""
+    /// The strip of dots between those two lines: which recent days were backed up.
+    public private(set) var backupStrip = BackupStrip.hidden
 
     /// The first-run checklist as of the last tick or refresh, or nil before the first one.
     /// Backups are scheduled only while it allows them.
@@ -220,6 +222,7 @@ public final class Scheduler {
             linkFailed: linkFailed
         ))
         self.checklist = checklist
+        chosenDiskBackups = Self.chosenDisk(in: preferences, destination)?.snapshotDates ?? []
         let diskCheckPassed = checklist.item(.diskSetUp)?.state == .passed
         disks = reading.disks.map { disk in
             ListedDisk(
@@ -375,6 +378,21 @@ public final class Scheduler {
 
     /// Time Machine's backup disk as of the last checklist reading.
     private var destination: DestinationInfo?
+    /// When each backup Time Machine has on the chosen disk was made, as of the last checklist
+    /// reading. Empty while no disk is chosen.
+    private var chosenDiskBackups: [Date] = []
+
+    /// The chosen disk's entry in Time Machine's preferences: by its ID, or the only entry when
+    /// the disks couldn't be read. Never a disk that isn't chosen.
+    private static func chosenDisk(
+        in preferences: TimeMachinePreferences?, _ destination: DestinationInfo?
+    ) -> TimeMachinePreferences.DestinationEntry? {
+        switch destination {
+        case let .configured(disk)?: preferences?.destination(id: disk.id)
+        case .unknown?: preferences?.destination(id: nil)
+        case .several?, .notSetUp?, nil: nil
+        }
+    }
 
     /// Story 35: after a new router, the home network has a new address and no longer counts as
     /// chosen. If the network disk is mounted (so the Mac can reach it) on a network that isn't
@@ -429,6 +447,7 @@ public final class Scheduler {
     /// Keychain item it made. Time Machine's settings and backups are never touched.
     public func uninstall() {
         system.uninstall()
+        backupStrip = .hidden
         backupCommandRunning = false
         updateSleepPrevention()
         system.unregisterLoginItem()
@@ -827,6 +846,13 @@ public final class Scheduler {
         statusLine = text.statusLine
         nextBackupLine = text.nextBackupLine
         networkLine = text.networkLine
+        backupStrip = BackupStripText(
+            history: history,
+            timeMachineBackups: chosenDiskBackups,
+            isShown: !isUninstalled && (checklist?.allowsBackups == true || !chosenDiskBackups.isEmpty),
+            now: system.now,
+            calendar: calendar
+        ).strip
     }
 
     /// "today 14:02", "yesterday 09:15", "tomorrow 14:02", or "3 Jan 14:02".
