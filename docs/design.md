@@ -21,7 +21,7 @@ The `Scheduler` is the core. Everything outside the app goes through the **Syste
 4. asks once per network whether to allow a new network (see Networks)
 5. holds or releases sleep prevention
 6. starts a backup if one is due and none is running, BackMeUp's or Time Machine's own
-7. checks alerts and updates the menu's lines
+7. checks alerts and updates the menu's lines, including the backup strip (`BackupStripText`): a dot per recent hour, day or week (the backup interval's unit) saying whether it was backed up, failed, was skipped or had nothing due, with a hover caption saying why
 
 **When a backup is due:** the backup interval (hours, days or weeks) after the last success, or straight away if there's never been one. After a failure, skip or pause, no sooner than the retry interval (minimum 15 minutes) after that attempt. Three shortcuts skip the retry wait when a backup is already due by the interval: the Mac comes back to a chosen network after a network skip, the checklist starts allowing backups after a setup skip, or another disk's backup ends after Back Up Now was skipped for it.
 
@@ -34,7 +34,7 @@ The `Scheduler` is the core. Everything outside the app goes through the **Syste
 5. the network rule, for network disks and for a disk whose kind can't be read, never for a local disk
 6. then `tmutil startbackup --auto --block` (with `--destination <ID>` for a disk chosen from several), judged by the success rule. If Time Machine's `RESULT` is 18 (it couldn't reach the network disk, for example just after login while a VPN is still starting) and there's no new snapshot, the attempt is a skip ("network backup disk not reachable"), not a failure
 
-Skips never count as failures. Each attempt is recorded in `BackupHistory` with its outcome: succeeded, failed (with a reason), skipped (with a reason) or paused. History keeps the last 200 attempts, plus a running tally since the last success (`SinceLastSuccess`) so alert counts stay right however many attempts are dropped.
+Skips never count as failures. Each attempt is recorded in `BackupHistory` with its outcome: succeeded, failed (with a reason), skipped (with a reason) or paused. History keeps every attempt from the last 12 weeks (as far back as the backup strip goes), at most 3,000, plus a running tally since the last success (`SinceLastSuccess`) so alert counts stay right however many attempts are dropped.
 
 **Several Time Machine disks:** `DestinationInfo` lists every disk. With two or more and none chosen, BackMeUp always asks: check 1 fails with a "Back up to" pop-up (also in Settings) and attempts skip with "setup isn't finished". The chosen disk's `ID` is saved as `BackupSettings.destinationID`, and checks 1, 3 and 6, the network rule, the success rule and the `--destination` all follow it. `DiskChoiceState` owns the rules for changing the choice; the scheduler applies each change and saves it.
 

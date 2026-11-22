@@ -313,9 +313,9 @@ final class FakeSystem: System {
         var preferences = preferences ?? TimeMachinePreferences(autoBackup: false, destinations: [])
         let entry = preferences.destination(id: id)
         let encryption = entry?.encryption ?? .encrypted
-        let latestSnapshot = addingSnapshot ? now : entry?.latestSnapshot
+        let snapshotDates = (entry?.snapshotDates ?? []) + (addingSnapshot ? [now] : [])
         preferences.destinations.removeAll { $0.id == id }
-        preferences.destinations.append(.init(id: id, encryption: encryption, result: result, latestSnapshot: latestSnapshot))
+        preferences.destinations.append(.init(id: id, encryption: encryption, result: result, snapshotDates: snapshotDates))
         self.preferences = preferences
     }
 }

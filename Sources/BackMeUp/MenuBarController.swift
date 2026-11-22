@@ -12,6 +12,9 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     private let statusLineItem = NSMenuItem(title: "Checking Time Machine…", action: nil, keyEquivalent: "")
     private let nextBackupItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+    /// The strip of dots: which recent hours, days or weeks were backed up.
+    private let stripItem = NSMenuItem()
+    private let stripView = BackupStripView()
     private let backUpNowItem = NSMenuItem(title: "Back Up Now", action: #selector(backUpNow), keyEquivalent: "")
     private let networkItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let allowNetworkItem = NSMenuItem(
@@ -48,7 +51,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         settingsItem.target = self
         let checklistItem = NSMenuItem(title: "Setup Checklist…", action: #selector(openChecklist), keyEquivalent: "")
         checklistItem.target = self
+        stripItem.view = stripView
+        stripItem.isHidden = true
         menu.addItem(statusLineItem)
+        menu.addItem(stripItem)
         menu.addItem(nextBackupItem)
         menu.addItem(.separator())
         networkItem.isEnabled = false
@@ -96,6 +102,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         MainActor.assumeIsolated {
             openMenuTimer?.invalidate()
             openMenuTimer = nil
+            stripView.clearHover()
         }
     }
 
@@ -168,6 +175,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private func draw() {
         statusLineItem.title = scheduler.statusLine
         nextBackupItem.title = scheduler.nextBackupLine
+        stripView.strip = scheduler.backupStrip
+        stripItem.isHidden = !scheduler.backupStrip.isShown
         nextBackupItem.isHidden = scheduler.nextBackupLine.isEmpty
         backUpNowItem.isEnabled = !scheduler.isBackingUp
         networkItem.title = scheduler.networkLine
