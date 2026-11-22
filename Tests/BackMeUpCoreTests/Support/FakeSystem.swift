@@ -20,6 +20,9 @@ final class FakeSystem: System {
         var runsWhileTimePasses = false
         /// Whether Time Machine records a new snapshot for the disk, as a finished backup does.
         var addsSnapshot = true
+        /// Whether Time Machine started its own backup to this disk just before BackMeUp's command,
+        /// so the command gives up straight away and `RESULT` is left as it was.
+        var alreadyInProgress = false
 
         static let succeeds = ScriptedBackup()
         static func fails(exitCode: Int32? = 0, result: Int? = 0, minutes: Double = 20) -> ScriptedBackup {
@@ -28,6 +31,9 @@ final class FakeSystem: System {
         /// `tmutil` exits 0 and `RESULT` is still 0 from an earlier backup, but no new backup was
         /// made.
         static let staleResult = ScriptedBackup(exitCode: 0, result: 0, addsSnapshot: false)
+        /// Time Machine started its own backup a moment before: `tmutil` prints "Backup already in
+        /// progress." and exits 3 at once, as seen on macOS 27.2.
+        static let alreadyInProgress = ScriptedBackup(exitCode: 3, result: nil, minutes: 0, addsSnapshot: false, alreadyInProgress: true)
         /// A backup that keeps running for `minutes` of simulated time, then ends as scripted.
         static func lasting(minutes: Double, exitCode: Int32? = 0, result: Int? = 0) -> ScriptedBackup {
             ScriptedBackup(
@@ -131,6 +137,10 @@ final class FakeSystem: System {
         startedBackupDestinations.append(destinationID)
         backingUpTo = destinationID
         guard let exitCode = backup.exitCode else { return nil }
+        if backup.alreadyInProgress {
+            timeMachineStatus = .running(destinationID: destinationID)
+            return exitCode
+        }
         let end = now.addingTimeInterval(backup.minutes * 60)
         if backup.runsWhileTimePasses {
             await withCheckedContinuation { runningBackup = (end, $0) }
