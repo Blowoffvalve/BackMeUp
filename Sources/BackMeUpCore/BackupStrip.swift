@@ -119,12 +119,30 @@ struct BackupStripText {
     }
 
     private func format(_ date: Date, _ format: String) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.calendar = calendar
-        formatter.timeZone = calendar.timeZone
-        formatter.dateFormat = format
-        return formatter.string(from: date)
+        Self.formatters.formatter(format, calendar: calendar).string(from: date)
+    }
+
+    /// Making a `DateFormatter` is slow, and the strip is worked out on every tick, so each one is
+    /// made once per format, calendar and time zone and kept.
+    private static let formatters = FormatterCache()
+
+    private final class FormatterCache: @unchecked Sendable {
+        private let lock = NSLock()
+        private var formatters: [String: DateFormatter] = [:]
+
+        func formatter(_ format: String, calendar: Calendar) -> DateFormatter {
+            let key = "\(format)|\(calendar.identifier)|\(calendar.timeZone.identifier)"
+            lock.lock()
+            defer { lock.unlock() }
+            if let formatter = formatters[key] { return formatter }
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.calendar = calendar
+            formatter.timeZone = calendar.timeZone
+            formatter.dateFormat = format
+            formatters[key] = formatter
+            return formatter
+        }
     }
 
     /// How long each slot is, how many the strip has, and how they're worded. Follows the
