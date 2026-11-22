@@ -851,6 +851,8 @@ public final class Scheduler {
             interval: settings.backupInterval,
             timeMachineBackups: chosenDiskBackups,
             isShown: !isUninstalled && (checklist?.allowsBackups == true || !chosenDiskBackups.isEmpty),
+            isBackingUp: isBackingUp || isTimeMachineRunningToChosenDisk,
+            progress: progress,
             now: system.now,
             calendar: calendar
         ).strip
