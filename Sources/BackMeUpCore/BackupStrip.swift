@@ -9,7 +9,10 @@ public struct BackupStrip: Equatable, Sendable {
         public enum Kind: Equatable, Sendable {
             /// ● A backup was made in the slot.
             case backedUp
-            /// ○ A backup was due in the slot but none was made.
+            /// ✕ (red) A backup was due in the slot, and one BackMeUp started in it failed.
+            case failed
+            /// ○ A backup was due in the slot but none was made, and none failed: BackMeUp skipped
+            /// it, the first backup paused, or nothing was recorded. The caption says which.
             case skipped
             /// · No backup was made, and none was due: the last one was recent enough throughout.
             case nothingDue
@@ -61,6 +64,9 @@ struct BackupStripText {
     var timeMachineBackups: [Date]
     /// Whether there's anything worth showing yet; see `BackupStrip.hidden`.
     var isShown: Bool
+    /// Whether a backup to the chosen disk is running, and how far it's got if Time Machine says.
+    var isBackingUp: Bool
+    var progress: BackupProgress?
     var now: Date
     var calendar: Calendar
 
@@ -69,7 +75,7 @@ struct BackupStripText {
         let unit = SlotUnit(interval.unit)
         let successes = self.successes
         let slotIntervals = slotIntervals(unit)
-        let slots = slotIntervals.enumerated().map { index, slot -> BackupStrip.Slot in
+        var slots = slotIntervals.enumerated().map { index, slot -> BackupStrip.Slot in
             let start = slot.start, end = slot.end
             let isCurrent = index == slotIntervals.count - 1
             let latest = successes.last { $0 >= start && $0 < end }
@@ -88,7 +94,12 @@ struct BackupStripText {
             if isCurrent {
                 return .init(start: start, kind: .nothingYet, isCurrent: true, caption: "\(label): nothing yet")
             }
-            return .init(start: start, kind: .skipped, isCurrent: false, caption: "\(label): missed")
+            let (kind, why) = missed(start: start, end: end)
+            return .init(start: start, kind: kind, isCurrent: false, caption: "\(label): \(why)")
+        }
+        if isBackingUp, !slots.isEmpty {
+            // The same figure as the status line.
+            slots[slots.count - 1].caption = progress.map { "backing up: \($0.percentText)" } ?? "backing up"
         }
         let backedUp = slots.filter { $0.kind == .backedUp }.count
         return BackupStrip(
@@ -96,6 +107,42 @@ struct BackupStripText {
             summary: "Backed up \(backedUp) of the last \(unit.count) \(unit.plural)",
             slots: slots
         )
+    }
+
+    /// Why a slot with a backup due and none made was missed, from BackMeUp's attempts in it: the
+    /// latest failure if any failed, else the most common skip reason (a paused first backup
+    /// counting as one), else no record. Never names a network, server or disk.
+    private func missed(start: Date, end: Date) -> (BackupStrip.Slot.Kind, String) {
+        let attempts = history.attempts.filter { $0.started >= start && $0.started < end }
+            .sorted { $0.started < $1.started }
+        var latestFailure: FailureReason?
+        var skips: [(why: String, count: Int, latest: Date)] = []
+        for attempt in attempts {
+            let why: String
+            switch attempt.outcome {
+            case .succeeded: continue
+            case let .failed(reason): latestFailure = reason; continue
+            case let .skipped(reason): why = "skipped, \(reason.description)"
+            case .paused: why = "first backup paused, carries on next time"
+            }
+            if let index = skips.firstIndex(where: { $0.why == why }) {
+                skips[index].count += 1
+                skips[index].latest = attempt.started
+            } else {
+                skips.append((why, 1, attempt.started))
+            }
+        }
+        if let latestFailure {
+            return (.failed, "failed, \(latestFailure.description)")
+        }
+        // Most common; between equally common ones, the latest.
+        if let skip = skips.max(by: { ($0.count, $0.latest) < ($1.count, $1.latest) }) {
+            return (.skipped, skip.why)
+        }
+        if let monitoringSince = history.monitoringSince, end <= monitoringSince {
+            return (.skipped, "before BackMeUp was set up")
+        }
+        return (.skipped, "missed: no record (Mac asleep, off, or BackMeUp not running)")
     }
 
     /// The strip's slots, oldest first, ending with the one now is in. Each slot is found from the
