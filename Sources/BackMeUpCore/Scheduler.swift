@@ -849,6 +849,7 @@ public final class Scheduler {
         backupStrip = BackupStripText(
             history: history,
             timeMachineBackups: chosenDiskBackups,
+            intervalUnit: settings.backupInterval.unit,
             isShown: !isUninstalled && (checklist?.allowsBackups == true || !chosenDiskBackups.isEmpty),
             now: system.now,
             calendar: calendar

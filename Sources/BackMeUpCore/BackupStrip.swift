@@ -1,8 +1,8 @@
 import Foundation
 
 /// The strip of dots in the menu, between the status line and the next-backup line: one slot per
-/// recent day, newest on the right, each saying whether it was backed up. The scheduler works it
-/// out; the menu only draws it.
+/// recent hour, day or week (the backup interval's unit), newest on the right, each saying whether
+/// it was backed up. The scheduler works it out; the menu only draws it.
 public struct BackupStrip: Equatable, Sendable {
     public struct Slot: Equatable, Sendable {
         /// What the slot's dot shows. Each kind has its own shape, so colour is never needed.
@@ -52,6 +52,8 @@ struct BackupStripText {
     var history: BackupHistory
     /// When each backup Time Machine still has on the chosen disk was made (its `SnapshotDates`).
     var timeMachineBackups: [Date]
+    /// The backup interval's unit, which sets the slots' size and number.
+    var intervalUnit: BackupInterval.Unit
     /// Whether there's anything worth showing yet; see `BackupStrip.hidden`.
     var isShown: Bool
     var now: Date
@@ -59,19 +61,19 @@ struct BackupStripText {
 
     var strip: BackupStrip {
         guard isShown else { return .hidden }
-        let unit = SlotUnit.days
+        let unit = SlotUnit(intervalUnit)
         let successes = self.successes
-        let current = calendar.dateInterval(of: unit.component, for: now)?.start ?? now
-        let slots = (0..<unit.count).reversed().map { back -> BackupStrip.Slot in
-            let start = calendar.date(byAdding: unit.component, value: -back, to: current) ?? current
-            let end = calendar.date(byAdding: unit.component, value: 1, to: start) ?? start
-            let latest = successes.last { $0 >= start && $0 < end }
-            let label = format(start, unit.captionFormat)
+        let intervals = slotIntervals(unit)
+        let slots = intervals.enumerated().map { index, interval -> BackupStrip.Slot in
+            let start = interval.start
+            let isCurrent = index == intervals.count - 1
+            let latest = successes.last { $0 >= start && $0 < interval.end }
+            let label = unit.label(start, format)
             if let latest {
-                return .init(start: start, kind: .backedUp, isCurrent: back == 0,
-                             caption: "\(label): backed up \(format(latest, "HH:mm"))")
+                return .init(start: start, kind: .backedUp, isCurrent: isCurrent,
+                             caption: "\(label): backed up \(format(latest, unit.backupTimeFormat))")
             }
-            return .init(start: start, kind: .skipped, isCurrent: back == 0, caption: "\(label): not backed up")
+            return .init(start: start, kind: .skipped, isCurrent: isCurrent, caption: "\(label): not backed up")
         }
         let backedUp = slots.filter { $0.kind == .backedUp }.count
         return BackupStrip(
@@ -79,6 +81,19 @@ struct BackupStripText {
             summary: "Backed up \(backedUp) of the last \(unit.count) \(unit.plural)",
             slots: slots
         )
+    }
+
+    /// The strip's slots, oldest first, ending with the one now is in. Each slot is found from the
+    /// moment just before the next one starts, so a daylight-saving change can't drop or repeat one.
+    private func slotIntervals(_ unit: SlotUnit) -> [DateInterval] {
+        guard var slot = calendar.dateInterval(of: unit.component, for: now) else { return [] }
+        var slots = [slot]
+        while slots.count < unit.count,
+              let previous = calendar.dateInterval(of: unit.component, for: slot.start.addingTimeInterval(-1)) {
+            slot = previous
+            slots.insert(slot, at: 0)
+        }
+        return slots
     }
 
     /// Every backup known to have finished, oldest first: Time Machine's, so ones BackMeUp didn't
@@ -97,13 +112,34 @@ struct BackupStripText {
         return formatter.string(from: date)
     }
 
-    /// How long each slot is, how many the strip has, and how they're worded.
+    /// How long each slot is, how many the strip has, and how they're worded. Follows the
+    /// interval's unit, whatever its count: "every 6 hours" still gives hour slots.
     private struct SlotUnit {
         var component: Calendar.Component
         var count: Int
         var plural: String
-        var captionFormat: String
+        var labelFormat: String
+        var labelPrefix = ""
+        /// How a backup's time is given in a backed-up slot's caption.
+        var backupTimeFormat: String
 
-        static let days = SlotUnit(component: .day, count: 14, plural: "days", captionFormat: "EEE d MMM")
+        init(_ unit: BackupInterval.Unit) {
+            switch unit {
+            case .hours:
+                component = .hour; count = 24; plural = "hours"
+                labelFormat = "EEE d MMM HH:mm"; backupTimeFormat = "HH:mm"
+            case .days:
+                component = .day; count = 14; plural = "days"
+                labelFormat = "EEE d MMM"; backupTimeFormat = "HH:mm"
+            case .weeks:
+                component = .weekOfYear; count = 12; plural = "weeks"
+                labelFormat = "d MMM"; labelPrefix = "week of "; backupTimeFormat = "EEE d MMM HH:mm"
+            }
+        }
+
+        /// "Tue 18 Nov 14:00", "Tue 18 Nov" or "week of 17 Nov".
+        func label(_ start: Date, _ format: (Date, String) -> String) -> String {
+            labelPrefix + format(start, labelFormat)
+        }
     }
 }
