@@ -848,6 +848,7 @@ public final class Scheduler {
         networkLine = text.networkLine
         backupStrip = BackupStripText(
             history: history,
+            interval: settings.backupInterval,
             timeMachineBackups: chosenDiskBackups,
             isShown: !isUninstalled && (checklist?.allowsBackups == true || !chosenDiskBackups.isEmpty),
             now: system.now,

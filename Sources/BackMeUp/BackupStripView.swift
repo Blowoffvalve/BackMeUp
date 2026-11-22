@@ -110,6 +110,13 @@ final class BackupStripView: NSView {
                 let path = NSBezierPath(ovalIn: dot.insetBy(dx: 0.75, dy: 0.75))
                 path.lineWidth = 1.5
                 path.stroke()
+            case .nothingDue:
+                let small = Self.dotSize * 0.375
+                color.withAlphaComponent(0.4).set()
+                NSBezierPath(ovalIn: NSRect(x: center.x - small / 2, y: center.y - small / 2, width: small, height: small)).fill()
+                color.set()
+            case .nothingYet:
+                break // Only the current slot's ring: nothing to show yet.
             }
             if slot.isCurrent {
                 let ring = NSBezierPath(ovalIn: dot.insetBy(dx: -3.5, dy: -3.5))
