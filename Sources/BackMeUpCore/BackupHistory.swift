@@ -198,9 +198,9 @@ public struct SinceLastSuccess: Codable, Equatable, Sendable {
 
 /// What BackMeUp remembers about its backups across restarts.
 public struct BackupHistory: Codable, Equatable, Sendable {
-    /// How long attempts are kept: as far back as the backup strip goes (12 weeks). Older ones
-    /// are dropped, but `sinceLastSuccess` still counts them.
-    public static let keptWeeks = 12
+    /// How long attempts are kept: as far back as the backup strip goes. Older ones are dropped,
+    /// but `sinceLastSuccess` still counts them.
+    public static let keptWeeks = BackupStripText.weekCount
     /// The most attempts kept however recent, so the saved history stays a few hundred KB at most.
     /// The oldest go first.
     public static let maximumAttempts = 3000

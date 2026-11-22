@@ -63,6 +63,10 @@ public struct BackupStrip: Equatable, Sendable {
 
 /// Works out the strip from what the scheduler knows. Pure, like `MenuText`.
 struct BackupStripText {
+    /// How many week slots the strip has: as far back as it ever goes. `BackupHistory` keeps
+    /// attempts this long so every slot can say why it was missed.
+    static let weekCount = 12
+
     var history: BackupHistory
     /// Today's interval. Every slot is judged by it, even ones from before it was changed. Its unit
     /// sets the slots' size and number.
@@ -83,33 +87,29 @@ struct BackupStripText {
         let successes = self.successes
         let slotIntervals = slotIntervals(unit)
         var slots = slotIntervals.enumerated().map { index, slotInterval -> BackupStrip.Slot in
-            let start = slotInterval.start, end = slotInterval.end
             let isCurrent = index == slotIntervals.count - 1
-            let latest = successes.last { $0 >= start && $0 < end }
-            if let latest {
-                return slot(start, unit, .backedUp, isCurrent: isCurrent) { full in
-                    "backed up \(format(latest, unit.backupTimeFormat(full: full)))"
-                }
+            func slot(_ kind: BackupStrip.Slot.Kind, _ what: (Formats) -> String) -> BackupStrip.Slot {
+                self.slot(slotInterval, unit, kind, isCurrent: isCurrent, what)
+            }
+            if let latest = successes.last(where: { $0 >= slotInterval.start && $0 < slotInterval.end }) {
+                return slot(.backedUp) { "backed up \(format(latest, $0.backupTime))" }
             }
             // With no success in the slot, the last success before any point in it is the last
             // one before it began, so a backup was due in the slot if that one's interval ran out
             // before the slot ended. With no success at all, one was due all along.
-            let due = successes.last { $0 < start }.map { interval.date(after: $0, in: calendar) } ?? .distantPast
-            guard due < end else {
-                return slot(start, unit, .nothingDue, isCurrent: isCurrent) { _ in "nothing due" }
-            }
-            let (kind, why) = missed(start: start, end: end)
+            let due = successes.last { $0 < slotInterval.start }.map { interval.date(after: $0, in: calendar) }
+                ?? .distantPast
+            guard due < slotInterval.end else { return slot(.nothingDue) { _ in "nothing due" } }
+            let (kind, why) = missed(in: slotInterval)
             // The current slot shows a failure straight away, but isn't missed while a backup is
             // still due later in it.
-            if isCurrent, kind != .failed {
-                return slot(start, unit, .nothingYet, isCurrent: true) { _ in "nothing yet" }
-            }
-            return slot(start, unit, kind, isCurrent: isCurrent) { _ in why }
+            if isCurrent, kind != .failed { return slot(.nothingYet) { _ in "nothing yet" } }
+            return slot(kind) { _ in why }
         }
-        if isBackingUp, let current = slots.last {
+        if isBackingUp, let current = slotIntervals.last, let kind = slots.last?.kind {
             // The same figure as the status line, after the slot's date like every caption.
             let what = progress.map { "backing up: \($0.percentText)" } ?? "backing up"
-            slots[slots.count - 1] = slot(current.start, unit, current.kind, isCurrent: true) { _ in what }
+            slots[slots.count - 1] = slot(current, unit, kind, isCurrent: true) { _ in what }
         }
         let backedUp = slots.filter { $0.kind == .backedUp }.count
         return BackupStrip(
@@ -122,11 +122,11 @@ struct BackupStripText {
     /// Why a slot with a backup due and none made was missed, from BackMeUp's attempts in it: the
     /// latest failure if any failed, else the most common skip reason (a paused first backup
     /// counting as one), else no record. Never names a network, server or disk.
-    private func missed(start: Date, end: Date) -> (BackupStrip.Slot.Kind, String) {
-        let attempts = history.attempts.filter { $0.started >= start && $0.started < end }
+    private func missed(in slot: DateInterval) -> (BackupStrip.Slot.Kind, String) {
+        let attempts = history.attempts.filter { $0.started >= slot.start && $0.started < slot.end }
             .sorted { $0.started < $1.started }
         var latestFailure: FailureReason?
-        var skips: [(why: String, count: Int, latest: Date)] = []
+        var skips: [SkipTally] = []
         for attempt in attempts {
             let why: String
             switch attempt.outcome {
@@ -139,7 +139,7 @@ struct BackupStripText {
                 skips[index].count += 1
                 skips[index].latest = attempt.started
             } else {
-                skips.append((why, 1, attempt.started))
+                skips.append(SkipTally(why: why, count: 1, latest: attempt.started))
             }
         }
         if let latestFailure {
@@ -149,10 +149,17 @@ struct BackupStripText {
         if let skip = skips.max(by: { ($0.count, $0.latest) < ($1.count, $1.latest) }) {
             return (.skipped, skip.why)
         }
-        if let monitoringSince = history.monitoringSince, end <= monitoringSince {
+        if let monitoringSince = history.monitoringSince, slot.end <= monitoringSince {
             return (.skipped, "before BackMeUp was set up")
         }
         return (.skipped, "missed: no record (Mac asleep, off, or BackMeUp not running)")
+    }
+
+    /// How often one kind of skip came up in a slot, and when it last did.
+    private struct SkipTally {
+        var why: String
+        var count: Int
+        var latest: Date
     }
 
     /// The strip's slots, oldest first, ending with the one now is in. Each slot is found from the
@@ -175,16 +182,18 @@ struct BackupStripText {
         return (timeMachineBackups + own + [history.lastSuccess].compactMap { $0 }).sorted()
     }
 
-    /// A slot saying `what` happened in it. The caption and VoiceOver's label say the same thing;
-    /// only the label writes dates out in full (`what` is given `full: true` for it).
+    /// A slot saying `what` happened in it, after its date. The caption and VoiceOver's label are
+    /// the same text, worded with the unit's short and full formats.
     private func slot(
-        _ start: Date, _ unit: SlotUnit, _ kind: BackupStrip.Slot.Kind, isCurrent: Bool,
-        _ what: (_ full: Bool) -> String
+        _ slot: DateInterval, _ unit: SlotUnit, _ kind: BackupStrip.Slot.Kind, isCurrent: Bool,
+        _ what: (Formats) -> String
     ) -> BackupStrip.Slot {
-        .init(
-            start: start, kind: kind, isCurrent: isCurrent,
-            caption: "\(unit.label(start, format, full: false)): \(what(false))",
-            accessibilityLabel: "\(unit.label(start, format, full: true)): \(what(true))"
+        func text(_ formats: Formats) -> String {
+            "\(unit.labelPrefix)\(format(slot.start, formats.label)): \(what(formats))"
+        }
+        return .init(
+            start: slot.start, kind: kind, isCurrent: isCurrent,
+            caption: text(unit.short), accessibilityLabel: text(unit.full)
         )
     }
 
@@ -215,46 +224,41 @@ struct BackupStripText {
         }
     }
 
+    /// How a slot's dates are written: short in the caption, full for VoiceOver.
+    private struct Formats {
+        /// The slot's start: "Tue 18 Nov 14:00", "Tue 18 Nov" or "18 Nov" (after "week of "); in
+        /// full, "Tuesday 18 November 14:00", "Tuesday 18 November" or "18 November".
+        var label: String
+        /// A backup's time in a backed-up slot.
+        var backupTime: String
+    }
+
     /// How long each slot is, how many the strip has, and how they're worded. Follows the
     /// interval's unit, whatever its count: "every 6 hours" still gives hour slots.
     private struct SlotUnit {
         var component: Calendar.Component
         var count: Int
         var plural: String
-        var labelFormat: String
-        /// `labelFormat` written out in full, for VoiceOver.
-        var fullLabelFormat: String
         var labelPrefix = ""
-        /// How a backup's time is given in a backed-up slot's caption.
-        var backupTimeFormat: String
-        /// `backupTimeFormat` written out in full, for VoiceOver.
-        var fullBackupTimeFormat: String
+        var short: Formats
+        var full: Formats
 
         init(_ unit: BackupInterval.Unit) {
             switch unit {
             case .hours:
                 component = .hour; count = 24; plural = "hours"
-                labelFormat = "EEE d MMM HH:mm"; fullLabelFormat = "EEEE d MMMM HH:mm"
-                backupTimeFormat = "HH:mm"; fullBackupTimeFormat = "HH:mm"
+                short = Formats(label: "EEE d MMM HH:mm", backupTime: "HH:mm")
+                full = Formats(label: "EEEE d MMMM HH:mm", backupTime: "HH:mm")
             case .days:
                 component = .day; count = 14; plural = "days"
-                labelFormat = "EEE d MMM"; fullLabelFormat = "EEEE d MMMM"
-                backupTimeFormat = "HH:mm"; fullBackupTimeFormat = "HH:mm"
+                short = Formats(label: "EEE d MMM", backupTime: "HH:mm")
+                full = Formats(label: "EEEE d MMMM", backupTime: "HH:mm")
             case .weeks:
-                component = .weekOfYear; count = 12; plural = "weeks"
-                labelFormat = "d MMM"; fullLabelFormat = "d MMMM"; labelPrefix = "week of "
-                backupTimeFormat = "EEE d MMM HH:mm"; fullBackupTimeFormat = "EEEE d MMMM HH:mm"
+                component = .weekOfYear; count = BackupStripText.weekCount; plural = "weeks"
+                labelPrefix = "week of "
+                short = Formats(label: "d MMM", backupTime: "EEE d MMM HH:mm")
+                full = Formats(label: "d MMMM", backupTime: "EEEE d MMMM HH:mm")
             }
-        }
-
-        /// "Tue 18 Nov 14:00", "Tue 18 Nov" or "week of 17 Nov"; in full, "Tuesday 18 November 14:00",
-        /// "Tuesday 18 November" or "week of 17 November".
-        func label(_ start: Date, _ format: (Date, String) -> String, full: Bool) -> String {
-            labelPrefix + format(start, full ? fullLabelFormat : labelFormat)
-        }
-
-        func backupTimeFormat(full: Bool) -> String {
-            full ? fullBackupTimeFormat : backupTimeFormat
         }
     }
 }
