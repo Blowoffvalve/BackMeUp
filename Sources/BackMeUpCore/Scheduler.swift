@@ -575,8 +575,10 @@ public final class Scheduler {
         backupTask = Task {
             let attempt = await runAttempt(byPerson: byPerson)
             // Uninstalled while Time Machine ran: Time Machine carries on, but nothing is recorded.
-            guard !isUninstalled else {
+            // Nor when Time Machine was already backing up to the disk: nothing was tried.
+            guard !isUninstalled, let attempt else {
                 backupTask = nil
+                describe()
                 return
             }
             let isFirstSuccess = history.lastSuccess == nil && attempt.outcome == .succeeded
@@ -598,7 +600,9 @@ public final class Scheduler {
         describe()
     }
 
-    private func runAttempt(byPerson: Bool) async -> BackupAttempt {
+    /// nil when Time Machine was already backing up to the disk, so BackMeUp tried nothing. The
+    /// menu shows that backup's progress instead.
+    private func runAttempt(byPerson: Bool) async -> BackupAttempt? {
         let started = system.now
         // Nothing starts, not even Back Up Now, until checks 1, 2 and 6 pass.
         await readChecklist()
@@ -607,9 +611,8 @@ public final class Scheduler {
         }
         // Scheduled backups wait for another disk's backup at the tick; Back Up Now is skipped.
         timeMachineStatus = await system.readTimeMachineStatus()
-        if isTimeMachineRunningToAnotherDisk {
-            return BackupAttempt(started: started, finished: started, outcome: .skipped(.timeMachineBackingUpToAnotherDisk))
-        }
+        if isTimeMachineRunningToAnotherDisk { return skippedForAnotherDisk(started: started) }
+        if isTimeMachineRunning { return alreadyBackingUpToTheDisk() }
         if !byPerson, !settings.allowBackupsOnBattery, system.powerSource == .battery {
             return BackupAttempt(started: started, finished: started, outcome: .skipped(.onBattery))
         }
@@ -649,6 +652,13 @@ public final class Scheduler {
         let exitCode = await system.startBackup(destinationID: destinationArgument)
         backupCommandRunning = false
         updateSleepPrevention()
+        // Time Machine started its own backup since the check above. `RESULT` is still the
+        // previous backup's, so it says nothing about this one.
+        if exitCode == Self.alreadyInProgressExitCode {
+            timeMachineStatus = await system.readTimeMachineStatus()
+            if isTimeMachineRunningToAnotherDisk { return skippedForAnotherDisk(started: started) }
+            if isTimeMachineRunning { return alreadyBackingUpToTheDisk() }
+        }
         let verdict = BackupVerdict(
             before: before,
             exitCode: exitCode,
@@ -662,6 +672,23 @@ public final class Scheduler {
             outcome = .failed(.timeMachineStuck(afterRestart: recordStuck(since: started)))
         }
         return BackupAttempt(started: started, finished: system.now, outcome: outcome)
+    }
+
+    /// `tmutil startbackup`'s exit code when Time Machine is already backing up, with "Backup
+    /// already in progress." Seen on macOS 27.2.
+    static let alreadyInProgressExitCode: Int32 = 3
+
+    /// Back Up Now while Time Machine backs up to another disk. Scheduled backups wait for it at
+    /// the tick instead.
+    private func skippedForAnotherDisk(started: Date) -> BackupAttempt {
+        BackupAttempt(started: started, finished: started, outcome: .skipped(.timeMachineBackingUpToAnotherDisk))
+    }
+
+    /// Time Machine is already backing up to the disk: nothing to try and nothing to record. The
+    /// menu shows that backup's progress.
+    private func alreadyBackingUpToTheDisk() -> BackupAttempt? {
+        system.log("Backup not started: Time Machine is already backing up to the disk")
+        return nil
     }
 
     /// Keeps the Mac awake only while BackMeUp's backup runs on AC power. On battery it sleeps as
