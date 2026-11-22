@@ -602,7 +602,7 @@ public final class Scheduler {
             }
             let isFirstSuccess = history.lastSuccess == nil && attempt.outcome == .succeeded
             let wasStuck = history.stuck != nil
-            history.record(attempt)
+            history.record(attempt, now: system.now, calendar: calendar)
             system.log(attempt.outcome.logLine)
             if isFirstSuccess, ntfy.isSetUp { history.firstBackupMessagePending = true }
             system.saveHistory(history)

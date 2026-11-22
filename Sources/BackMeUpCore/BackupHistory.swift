@@ -198,8 +198,12 @@ public struct SinceLastSuccess: Codable, Equatable, Sendable {
 
 /// What BackMeUp remembers about its backups across restarts.
 public struct BackupHistory: Codable, Equatable, Sendable {
-    /// How many attempts are kept. Older ones are dropped, but `sinceLastSuccess` still counts them.
-    public static let maximumAttempts = 200
+    /// How long attempts are kept: as far back as the backup strip goes (12 weeks). Older ones
+    /// are dropped, but `sinceLastSuccess` still counts them.
+    public static let keptWeeks = 12
+    /// The most attempts kept however recent, so the saved history stays a few hundred KB at most.
+    /// The oldest go first.
+    public static let maximumAttempts = 3000
 
     /// When the last successful backup finished.
     public var lastSuccess: Date?
@@ -233,11 +237,15 @@ public struct BackupHistory: Codable, Equatable, Sendable {
         self.attempts = attempts
     }
 
-    mutating func record(_ attempt: BackupAttempt) {
+    /// Records an attempt and drops the ones that started more than `keptWeeks` before `now`.
+    mutating func record(_ attempt: BackupAttempt, now: Date, calendar: Calendar) {
         var tally = sinceLastSuccess
         tally.add(attempt)
         storedSinceLastSuccess = tally
         attempts.append(attempt)
+        if let cutoff = calendar.date(byAdding: .weekOfYear, value: -Self.keptWeeks, to: now) {
+            attempts.removeAll { $0.started < cutoff }
+        }
         if attempts.count > Self.maximumAttempts {
             attempts.removeFirst(attempts.count - Self.maximumAttempts)
         }

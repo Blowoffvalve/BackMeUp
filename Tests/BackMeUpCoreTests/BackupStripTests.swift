@@ -405,6 +405,70 @@ struct BackupStripTests {
         #expect(harness.scheduler.backupStrip.slots.last?.isCurrent == true)
     }
 
+    // MARK: How long reasons are kept
+
+    /// A weekly network disk in the UK whose history BackMeUp has kept since well before the strip
+    /// begins, with these attempts. Restarting records one more: a failed backup.
+    func harnessWithWeeklyHistory(_ attempts: [BackupAttempt]) async -> SchedulerHarness {
+        var calendar = SchedulerHarness.utcCalendar
+        calendar.locale = Locale(identifier: "en_GB")
+        let harness = harnessWithNetworkDisk(calendar: calendar)
+        harness.system.storedSettings = BackupSettings(backupInterval: .init(count: 1, unit: .weeks), retryMinutes: 60)
+        var history = BackupHistory(attempts: attempts)
+        history.monitoringSince = Self.minutes(-120 * 24 * 60)
+        harness.system.storedHistory = history
+        harness.system.nextBackup = .fails(result: 19)
+        await harness.restart()
+        return harness
+    }
+
+    /// Hourly skips while away, every hour for the last 20 days.
+    static let hourlySkips = (1...480).reversed().map { hour in
+        let started = minutes(-Double(hour) * 60)
+        return BackupAttempt(started: started, finished: started, outcome: .skipped(.notOnChosenNetwork))
+    }
+
+    @Test func theOldestMissedWeekStillSaysWhyAfterHundredsOfLaterAttempts() async {
+        let harness = await harnessWithWeeklyHistory(
+            [Self.attempt(day: 80, hour: 9, .failed(.couldNotStart))] + Self.hourlySkips // Mon 13 Oct 09:00
+        )
+
+        let first = harness.scheduler.backupStrip.slots.first
+        #expect(first?.kind == .failed)
+        #expect(first?.caption == "week of 13 Oct: failed, couldn't start Time Machine")
+    }
+
+    @Test func attemptsOlderThanTwelveWeeksAreDroppedButStillCountedSinceTheLastSuccess() async {
+        let harness = await harnessWithWeeklyHistory([
+            Self.attempt(day: 85, hour: 9, .failed(.couldNotStart)), // Wed 8 Oct, over 12 weeks ago
+            Self.attempt(day: 83, hour: 9, .skipped(.onBattery)), // Fri 10 Oct, within them
+        ])
+
+        let saved = harness.system.storedHistory
+        #expect(saved?.attempts.map(\.started) == [
+            Self.minutes(-83 * 24 * 60 + 9 * 60),
+            Self.minutes(0),
+        ])
+        #expect(saved?.sinceLastSuccess.failures == 2)
+        #expect(saved?.sinceLastSuccess.skipCount == 1)
+        #expect(harness.scheduler.backupStrip.slots.first?.caption == "week of 13 Oct: missed: no record (Mac asleep, off, or BackMeUp not running)")
+    }
+
+    @Test func neverMoreThanThreeThousandAttemptsAreKeptAndTheOldestGoFirst() async {
+        let everyHalfHour = (2...3101).reversed().map { halfHour in // the last 64 days or so, up to an hour ago
+            let started = Self.minutes(-Double(halfHour) * 30)
+            return BackupAttempt(started: started, finished: started, outcome: .skipped(.onBattery))
+        }
+
+        let harness = await harnessWithWeeklyHistory(everyHalfHour)
+
+        let saved = harness.system.storedHistory
+        #expect(saved?.attempts.count == 3000)
+        #expect(saved?.attempts.first?.started == Self.minutes(-3000 * 30)) // the 101 oldest dropped
+        #expect(saved?.attempts.last?.started == Self.minutes(0))
+        #expect(saved?.sinceLastSuccess.skipCount == 3100)
+    }
+
     // MARK: When it shows
 
     @Test func hiddenUntilSetupAllowsBackupsOrABackupExists() async {
