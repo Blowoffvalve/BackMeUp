@@ -53,6 +53,30 @@ struct PreferencesParserTests {
         #expect(preferences.destination(id: Self.destinationID)?.latestSnapshot == Date(timeIntervalSince1970: 1_767_419_211))
     }
 
+    @Test func everySnapshotDateComesFromTheRealOutput() throws {
+        let preferences = try #require(TimeMachinePreferences(defaultsOutput: try fixture("defaults-timemachine-network.txt")))
+        // 2026-01-01 02:55:32, 2026-01-02 03:11:55 and 2026-01-03 05:46:51 +0000.
+        #expect(preferences.destination(id: Self.destinationID)?.snapshotDates == [
+            Date(timeIntervalSince1970: 1_767_236_132),
+            Date(timeIntervalSince1970: 1_767_323_515),
+            Date(timeIntervalSince1970: 1_767_419_211),
+        ])
+    }
+
+    @Test(arguments: [
+        // Kept oldest first, whatever order they're listed in.
+        (#"SnapshotDates = ("2026-01-02 00:00:00 +0000", "2026-01-01 00:00:00 +0000");"#, [1_767_225_600, 1_767_312_000] as [Double]),
+        (#"SnapshotDates = ("2026-01-01 00:00:00 +0000", "not a date", "2026-01-02 00:00:00 +0000");"#, [1_767_225_600, 1_767_312_000]),
+        (#"SnapshotDates = ("2026-01-02 01:00:00 +0100");"#, [1_767_312_000]),
+        (#"SnapshotDates = ();"#, []),
+        (#"SnapshotDates = "2026-01-02 00:00:00 +0000";"#, []),
+        ("", []),
+    ])
+    func snapshotDates(line: String, expected: [Double]) throws {
+        let preferences = try #require(TimeMachinePreferences(defaultsOutput: Self.oneDestination(line)))
+        #expect(preferences.destination(id: "ID-1")?.snapshotDates == expected.map(Date.init(timeIntervalSince1970:)))
+    }
+
     @Test(arguments: [
         // Newest first or last, it's the newest that counts.
         (#"SnapshotDates = ("2026-01-02 00:00:00 +0000", "2026-01-01 00:00:00 +0000");"#, 1_767_312_000 as Double?),

@@ -19,15 +19,19 @@ public struct TimeMachinePreferences: Equatable, Sendable {
         /// `RESULT`: Time Machine's result code for the last backup to this disk. 0 means success.
         /// Nothing in it says which backup it belongs to.
         public var result: Int?
+        /// `SnapshotDates`, oldest first: when each backup still on this disk was made. Time
+        /// Machine thins old ones (hourly kept for 24 hours, then daily for a month, then weekly).
+        public var snapshotDates: [Date]
+
         /// The newest of `SnapshotDates`: when the latest backup on this disk was made. A finished
         /// backup adds one, so a newer one shows `result` belongs to a backup that just finished.
-        public var latestSnapshot: Date?
+        public var latestSnapshot: Date? { snapshotDates.max() }
 
-        public init(id: String?, encryption: EncryptionState = .unknown, result: Int?, latestSnapshot: Date? = nil) {
+        public init(id: String?, encryption: EncryptionState = .unknown, result: Int?, snapshotDates: [Date] = []) {
             self.id = id
             self.encryption = encryption
             self.result = result
-            self.latestSnapshot = latestSnapshot
+            self.snapshotDates = snapshotDates.sorted()
         }
     }
 
@@ -65,7 +69,7 @@ extension TimeMachinePreferences {
                 id: entry.string("DestinationID"),
                 encryption: EncryptionState(preferenceValue: entry.string("LastKnownEncryptionState")),
                 result: entry.integer("RESULT"),
-                latestSnapshot: entry.dates("SnapshotDates").max()
+                snapshotDates: entry.dates("SnapshotDates")
             )
         }
     }

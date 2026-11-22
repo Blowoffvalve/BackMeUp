@@ -56,9 +56,9 @@ struct ChooseDiskTests {
         harness.system.destinationInfo = .several([Self.usbDisk, Self.networkDisk, unnamedDisk])
         harness.system.preferences = TimeMachinePreferences(autoBackup: false, destinations: [
             .init(id: "usb-id", encryption: .notEncrypted, result: 0,
-                  latestSnapshot: harness.minutes(-4 * 30 * 24 * 60 - 90)),
+                  snapshotDates: [harness.minutes(-4 * 30 * 24 * 60 - 90)]),
             .init(id: "network-id", encryption: .encrypted, result: 0,
-                  latestSnapshot: harness.minutes(-3 * 24 * 60 - 5)),
+                  snapshotDates: [harness.minutes(-3 * 24 * 60 - 5)]),
             .init(id: "unnamed-id", result: nil),
         ])
 
@@ -87,7 +87,7 @@ struct ChooseDiskTests {
     @Test(arguments: ages)
     func agesReadNaturally(minutesAgo: Double, expected: String) async {
         let harness = harnessWithTwoDisks()
-        harness.system.preferences?.destinations[1].latestSnapshot = harness.minutes(-minutesAgo)
+        harness.system.preferences?.destinations[1].snapshotDates = [harness.minutes(-minutesAgo)]
 
         await harness.start()
 
@@ -97,7 +97,7 @@ struct ChooseDiskTests {
     /// A label ages as the scheduler's clock moves on and the checklist is read again.
     @Test func aLabelAgesAsTimePasses() async {
         let harness = harnessWithTwoDisks()
-        harness.system.preferences?.destinations[1].latestSnapshot = harness.minutes(-50)
+        harness.system.preferences?.destinations[1].snapshotDates = [harness.minutes(-50)]
         await harness.start()
 
         await harness.advance(minutes: 20)
