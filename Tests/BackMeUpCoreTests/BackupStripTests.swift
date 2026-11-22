@@ -89,6 +89,26 @@ struct BackupStripTests {
         #expect(captions(harness).suffix(3).first == "Tue 30 Dec: backed up 01:00")
     }
 
+    // MARK: VoiceOver
+
+    @Test func voiceOverReadsEachDotsCaptionWrittenOutInFullAndTheSummaryForTheStrip() async {
+        let harness = harnessWithNetworkDisk(snapshots: [
+            Self.minutes(-2 * 24 * 60 + 9 * 60 + 14), // Tue 30 Dec 09:14
+        ])
+        harness.system.nextBackup = .fails(result: 19)
+
+        await harness.start()
+
+        let strip = harness.scheduler.backupStrip
+        #expect(strip.accessibilityLabel == "Backed up 1 of the last 14 days")
+        #expect(strip.slots.map(\.accessibilityLabel).first == "Friday 19 December: not backed up")
+        #expect(strip.slots.map(\.accessibilityLabel).suffix(3) == [
+            "Tuesday 30 December: backed up 09:14",
+            "Wednesday 31 December: not backed up",
+            "Thursday 1 January: not backed up",
+        ])
+    }
+
     // MARK: When it shows
 
     @Test func hiddenUntilSetupAllowsBackupsOrABackupExists() async {

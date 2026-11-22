@@ -3,7 +3,8 @@ import BackMeUpCore
 
 /// The menu's strip of dots and its caption line. Draws only what the scheduler publishes:
 /// hovering a dot shows its caption, and otherwise the line shows the summary. No tooltips; they're
-/// unreliable inside menus.
+/// unreliable inside menus. For VoiceOver the strip is a group labelled with the summary, holding
+/// one element per dot labelled with that slot's caption written out in full.
 @MainActor
 final class BackupStripView: NSView {
     private static let inset: CGFloat = 14
@@ -17,6 +18,7 @@ final class BackupStripView: NSView {
             guard strip != oldValue else { return }
             if let hovered, hovered >= strip.slots.count { self.hovered = nil }
             needsDisplay = true
+            updateAccessibility()
         }
     }
 
@@ -28,6 +30,8 @@ final class BackupStripView: NSView {
     init() {
         super.init(frame: NSRect(x: 0, y: 0, width: 300, height: Self.dotsHeight + 22))
         autoresizingMask = .width
+        setAccessibilityElement(true)
+        setAccessibilityRole(.group)
     }
 
     @available(*, unavailable)
@@ -60,6 +64,31 @@ final class BackupStripView: NSView {
 
     override func mouseExited(with event: NSEvent) {
         hovered = nil
+    }
+
+    /// Labels the strip with the summary and gives VoiceOver one element per dot, each labelled with
+    /// its slot's caption written out in full.
+    private func updateAccessibility() {
+        setAccessibilityLabel(strip.accessibilityLabel)
+        setAccessibilityChildren(strip.slots.enumerated().map { index, slot in
+            let element = NSAccessibilityElement()
+            element.setAccessibilityRole(.image)
+            element.setAccessibilityLabel(slot.accessibilityLabel)
+            element.setAccessibilityParent(self)
+            // Parent space isn't flipped: y counts up from the view's bottom.
+            element.setAccessibilityFrameInParentSpace(NSRect(
+                x: Self.inset + Self.slotWidth * CGFloat(index),
+                y: bounds.height - Self.dotsHeight,
+                width: Self.slotWidth,
+                height: Self.dotsHeight
+            ))
+            return element
+        })
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        updateAccessibility()
     }
 
     private func slot(at point: NSPoint) -> Int? {

@@ -21,12 +21,16 @@ public struct BackupStrip: Equatable, Sendable {
         /// What the slot says while hovered, e.g. "Wed 19 Nov: backed up 09:14". Never names a
         /// network, server or disk.
         public var caption: String
+        /// What VoiceOver reads for the slot's dot: the caption with its date written out in full,
+        /// e.g. "Wednesday 19 November: backed up 09:14".
+        public var accessibilityLabel: String
 
-        public init(start: Date, kind: Kind, isCurrent: Bool, caption: String) {
+        public init(start: Date, kind: Kind, isCurrent: Bool, caption: String, accessibilityLabel: String) {
             self.start = start
             self.kind = kind
             self.isCurrent = isCurrent
             self.caption = caption
+            self.accessibilityLabel = accessibilityLabel
         }
     }
 
@@ -36,6 +40,9 @@ public struct BackupStrip: Equatable, Sendable {
     public var summary: String
     /// Oldest first, ending with the current slot.
     public var slots: [Slot]
+
+    /// What VoiceOver reads for the strip as a whole: the summary.
+    public var accessibilityLabel: String { summary }
 
     public init(isShown: Bool, summary: String, slots: [Slot]) {
         self.isShown = isShown
@@ -66,12 +73,10 @@ struct BackupStripText {
             let start = calendar.date(byAdding: unit.component, value: -back, to: current) ?? current
             let end = calendar.date(byAdding: unit.component, value: 1, to: start) ?? start
             let latest = successes.last { $0 >= start && $0 < end }
-            let label = format(start, unit.captionFormat)
             if let latest {
-                return .init(start: start, kind: .backedUp, isCurrent: back == 0,
-                             caption: "\(label): backed up \(format(latest, "HH:mm"))")
+                return slot(start, unit, .backedUp, isCurrent: back == 0, "backed up \(format(latest, "HH:mm"))")
             }
-            return .init(start: start, kind: .skipped, isCurrent: back == 0, caption: "\(label): not backed up")
+            return slot(start, unit, .skipped, isCurrent: back == 0, "not backed up")
         }
         let backedUp = slots.filter { $0.kind == .backedUp }.count
         return BackupStrip(
@@ -86,6 +91,18 @@ struct BackupStripText {
     private var successes: [Date] {
         let own = history.attempts.filter { $0.outcome == .succeeded }.map(\.finished)
         return (timeMachineBackups + own + [history.lastSuccess].compactMap { $0 }).sorted()
+    }
+
+    /// A slot saying `what` happened in it. The caption and VoiceOver's label say the same thing;
+    /// only the label writes the date out in full.
+    private func slot(
+        _ start: Date, _ unit: SlotUnit, _ kind: BackupStrip.Slot.Kind, isCurrent: Bool, _ what: String
+    ) -> BackupStrip.Slot {
+        .init(
+            start: start, kind: kind, isCurrent: isCurrent,
+            caption: "\(format(start, unit.captionFormat)): \(what)",
+            accessibilityLabel: "\(format(start, unit.accessibilityFormat)): \(what)"
+        )
     }
 
     private func format(_ date: Date, _ format: String) -> String {
@@ -103,7 +120,11 @@ struct BackupStripText {
         var count: Int
         var plural: String
         var captionFormat: String
+        /// The caption's date written out in full, for VoiceOver.
+        var accessibilityFormat: String
 
-        static let days = SlotUnit(component: .day, count: 14, plural: "days", captionFormat: "EEE d MMM")
+        static let days = SlotUnit(
+            component: .day, count: 14, plural: "days", captionFormat: "EEE d MMM", accessibilityFormat: "EEEE d MMMM"
+        )
     }
 }
