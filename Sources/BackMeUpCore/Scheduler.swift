@@ -29,6 +29,9 @@ public final class Scheduler {
     public private(set) var statusLine = ""
     /// The menu's second line: when the next backup is planned.
     public private(set) var nextBackupLine = ""
+    /// The note under the first line while a backup runs: the Mac stays awake until it finishes,
+    /// so don't close the lid. Empty otherwise.
+    public private(set) var stayAwakeNote = ""
     /// The strip of dots between those two lines: which recent hours, days or weeks (the backup
     /// interval's unit) were backed up.
     public private(set) var backupStrip = BackupStrip.hidden
@@ -846,6 +849,7 @@ public final class Scheduler {
         )
         statusLine = text.statusLine
         nextBackupLine = text.nextBackupLine
+        stayAwakeNote = text.stayAwakeNote
         networkLine = text.networkLine
         backupStrip = BackupStripText(
             history: history,

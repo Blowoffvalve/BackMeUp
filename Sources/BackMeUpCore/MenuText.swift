@@ -52,6 +52,12 @@ struct MenuText {
         return nextBackupDue <= dates.now ? "\(label): now" : "\(label): \(dates.describe(nextBackupDue))"
     }
 
+    /// The note under the first line while a backup runs. Time Machine keeps the Mac from idle
+    /// sleep for the whole backup, on battery too; only closing the lid stops it. Empty otherwise.
+    var stayAwakeNote: String {
+        isBackingUp ? "Your Mac will stay awake until this backup finishes. Don't close the lid." : ""
+    }
+
     /// The network line: the current network's label and whether backups may run on it. Never
     /// shows the router's hardware address. Empty before the network has been read.
     var networkLine: String {

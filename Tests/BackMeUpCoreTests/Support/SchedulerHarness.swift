@@ -50,6 +50,7 @@ final class SchedulerHarness {
 
     var statusLine: String { scheduler.statusLine }
     var nextBackupLine: String { scheduler.nextBackupLine }
+    var stayAwakeNote: String { scheduler.stayAwakeNote }
     /// The Mac notifications shown so far.
     var notifications: [Alert] { system.notifications.map(\.alert) }
 
