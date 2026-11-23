@@ -27,7 +27,7 @@ struct StatusParserTests {
         ("status-running-starting.plist", BackupStage.gettingReady),
         ("status-running-mounting.plist", .gettingReady),
         ("status-running-mounting-backup-vol.plist", .gettingReady),
-        ("status-running-health-check.plist", .gettingReady),
+        ("status-running-health-check-copy-hfs-meta.plist", .gettingReady),
         ("status-running-calculating-changes.plist", .gettingReady),
         ("status-running-finding-changes.plist", .gettingReady),
         ("status-running-preparing-source-volumes.plist", .gettingReady),
