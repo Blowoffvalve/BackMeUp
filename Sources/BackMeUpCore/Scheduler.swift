@@ -855,10 +855,10 @@ public final class Scheduler {
     }
 
     /// The running backup's stage, for the menu. A backup BackMeUp has started is getting ready
-    /// until Time Machine reports it running with a stage name, so the line doesn't flip between
-    /// phrases while Time Machine catches up.
+    /// until Time Machine reports it running, so the menu shows the request was taken. From then
+    /// on the stage is Time Machine's own, so an unknown or missing name gets the neutral line.
     private var backupStage: BackupStage {
-        if isBackingUp, timeMachineStatus.phase == nil { return .gettingReady }
+        if isBackingUp, !isTimeMachineRunning { return .gettingReady }
         return timeMachineStatus.stage
     }
 

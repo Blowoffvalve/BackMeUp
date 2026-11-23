@@ -138,16 +138,21 @@ struct StatusLineTests {
         #expect(harness.statusLine == row.anotherDisk)
     }
 
-    /// Before Time Machine names a stage for a backup BackMeUp started, the line already says
+    /// Before Time Machine reports a backup BackMeUp started as running, the line already says
     /// it's getting ready, and keeps saying so through Time Machine's own preparing stages.
     @Test func theFirstBackupGetsReadyFromTheMomentBackMeUpStartsIt() async {
         let harness = SchedulerHarness()
         harness.system.destinationInfo = Self.networkDisk
         harness.system.nextBackup = .lasting(minutes: 600)
+        harness.system.reportsStartedBackup = false
 
         await harness.start()
         #expect(harness.statusLine == "Getting ready for first backup")
 
+        await harness.advance(minutes: 1)
+        #expect(harness.statusLine == "Getting ready for first backup")
+
+        harness.system.reportsStartedBackup = true
         harness.system.startedBackupPhase = "MountingBackupVol"
         await harness.advance(minutes: 1)
         #expect(harness.statusLine == "Getting ready for first backup")
@@ -159,6 +164,19 @@ struct StatusLineTests {
         harness.system.backupProgress = BackupProgress(fraction: 0.352, timeRemaining: 3 * 3600)
         await harness.advance(minutes: 1)
         #expect(harness.statusLine == "First backup: 35.2%, about 3 hours left")
+    }
+
+    /// Once Time Machine reports a backup BackMeUp started as running, a missing stage name gets
+    /// the neutral line, as for any other backup.
+    @Test func aBackupBackMeUpStartedWithNoStageNameGetsTheNeutralLine() async {
+        let harness = SchedulerHarness()
+        harness.system.destinationInfo = Self.networkDisk
+        harness.system.nextBackup = .lasting(minutes: 600)
+
+        await harness.start()
+        await harness.advance(minutes: 1)
+
+        #expect(harness.statusLine == "Time Machine is working on the first backup")
     }
 
     @Test func backUpNowSaysItIsGettingReadyStraightAway() async {

@@ -98,9 +98,15 @@ final class FakeSystem: System {
     /// while it runs. nil: running, with no stage named yet.
     var startedBackupPhase: String?
 
+    /// false: Time Machine doesn't report a backup started through the port as running yet, as
+    /// in the moments before it catches up with `tmutil startbackup`.
+    var reportsStartedBackup = true
+
     /// Time Machine reports itself running while a backup started through the port runs.
     func readTimeMachineStatus() async -> TimeMachineStatus {
-        runningBackup != nil ? .running(destinationID: backingUpTo, phase: startedBackupPhase) : timeMachineStatus
+        runningBackup != nil && reportsStartedBackup
+            ? .running(destinationID: backingUpTo, phase: startedBackupPhase)
+            : timeMachineStatus
     }
 
     func readBackupProgress() async -> BackupProgress? {
