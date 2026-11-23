@@ -61,7 +61,7 @@ public final class Scheduler {
     /// Whether Time Machine is backing up to the chosen disk, for the status line and progress.
     /// With no disk chosen, or when Time Machine doesn't say which disk, any backup counts.
     private var isTimeMachineRunningToChosenDisk: Bool {
-        guard case let .running(runningTo) = timeMachineStatus else { return false }
+        guard case let .running(runningTo, _) = timeMachineStatus else { return false }
         guard let chosen = diskChoice.chosenID, let runningTo else { return true }
         return runningTo == chosen
     }
@@ -91,6 +91,10 @@ public final class Scheduler {
 
     /// Whether a backup started by BackMeUp is running.
     public var isBackingUp: Bool { backupTask != nil }
+
+    /// Why Back Up Now can't be chosen right now, for the menu to show under it, or nil when it can.
+    /// Time Machine refuses a new backup while any backup, or its cleanup, is still running.
+    public private(set) var backUpNowUnavailableReason: String?
 
     /// Why the last due backup was skipped, while that's still the latest news. For alerts.
     public var skipReason: SkipReason? {
@@ -839,6 +843,7 @@ public final class Scheduler {
             nextBackupDue: nextBackupDue,
             isBackingUp: isBackingUp || isTimeMachineRunningToChosenDisk,
             isBackingUpToAnotherDisk: !isBackingUp && isTimeMachineRunningToAnotherDisk,
+            isCleaningUp: timeMachineStatus.isCleaningUp,
             progress: progress,
             timeLeft: timeLeft,
             isWaitingForSetup: checklist?.allowsBackups == false,
@@ -850,6 +855,7 @@ public final class Scheduler {
         statusLine = text.statusLine
         nextBackupLine = text.nextBackupLine
         stayAwakeNote = text.stayAwakeNote
+        backUpNowUnavailableReason = text.backUpNowUnavailableReason
         networkLine = text.networkLine
         backupStrip = BackupStripText(
             history: history,

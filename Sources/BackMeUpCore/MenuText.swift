@@ -8,6 +8,8 @@ struct MenuText {
     var isBackingUp: Bool
     /// Whether Time Machine is backing up to a disk other than the chosen one, started from its own menu.
     var isBackingUpToAnotherDisk: Bool = false
+    /// Whether Time Machine is deleting old backups, to whichever disk it's backing up to.
+    var isCleaningUp: Bool = false
     var progress: BackupProgress?
     /// The time left in the running backup, if it can be told.
     var timeLeft: TimeInterval?
@@ -22,8 +24,10 @@ struct MenuText {
 
     /// The first line: the last backup, or what went wrong with it.
     var statusLine: String {
-        if isBackingUp { return progressLine }
-        if isBackingUpToAnotherDisk { return "Time Machine is backing up to another disk" }
+        if isBackingUp { return isCleaningUp ? "Time Machine is cleaning up old backups" : progressLine }
+        if isBackingUpToAnotherDisk {
+            return isCleaningUp ? "Time Machine is cleaning up another disk" : "Time Machine is backing up to another disk"
+        }
         if isWaitingForSetup { return "Finish setting up: see the checklist" }
         switch history.attempts.last?.outcome {
         case let .failed(reason)?:
@@ -38,6 +42,13 @@ struct MenuText {
         case .succeeded?, nil:
             return history.lastSuccess.map { "Last backup: \(dates.describe($0))" } ?? "No backups yet"
         }
+    }
+
+    /// Shown under the greyed-out Back Up Now item: why it can't be chosen. nil when it can.
+    var backUpNowUnavailableReason: String? {
+        if isCleaningUp { return "Available once Time Machine finishes cleaning up" }
+        if isBackingUp || isBackingUpToAnotherDisk { return "Available once this backup finishes" }
+        return nil
     }
 
     /// The line under the strip of dots: when the next backup is planned. Empty while backing up.
