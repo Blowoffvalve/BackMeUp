@@ -47,7 +47,7 @@ public enum BackupStage: Equatable, Sendable {
     case unknown
 
     /// Every name these match comes before copying, so "getting ready" never overstates.
-    static let gettingReadyPrefixes = ["Starting", "Mounting", "HealthCheck", "Calculating", "Finding", "Preparing"]
+    private static let gettingReadyPrefixes = ["Starting", "Mounting", "HealthCheck", "Calculating", "Finding", "Preparing"]
 
     public init(phase: String?) {
         guard let phase else {
