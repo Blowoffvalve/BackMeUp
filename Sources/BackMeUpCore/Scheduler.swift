@@ -48,6 +48,8 @@ public final class Scheduler {
     public var onChange: (() -> Void)?
 
     private var timeMachineStatus = TimeMachineStatus.unknown
+    /// The last stage name Time Machine gave, nil for none, to log when it changes.
+    private var lastPhase: String?
     private var progress: BackupProgress?
     /// The first progress seen in the running backup, to estimate the time left from.
     private var progressStart: (date: Date, fraction: Double)?
@@ -122,7 +124,7 @@ public final class Scheduler {
     /// Called by the app's timer, and by the test harness at each step of simulated time.
     public func tick() async {
         guard !isUninstalled else { return }
-        timeMachineStatus = await system.readTimeMachineStatus()
+        await readTimeMachineStatus()
         currentNetwork = await system.readNetwork()
         await readProgress()
         let isUpdated = isFirstLaunchAfterUpdate
@@ -151,7 +153,7 @@ public final class Scheduler {
     /// Re-reads Time Machine's state for the menu without ever starting a backup.
     public func refreshStatus() async {
         guard !isUninstalled else { return }
-        timeMachineStatus = await system.readTimeMachineStatus()
+        await readTimeMachineStatus()
         currentNetwork = await system.readNetwork()
         await readProgress()
         await readChecklist()
@@ -637,7 +639,7 @@ public final class Scheduler {
             return BackupAttempt(started: started, finished: started, outcome: .skipped(reason))
         }
         // Scheduled backups wait for another disk's backup at the tick; Back Up Now is skipped.
-        timeMachineStatus = await system.readTimeMachineStatus()
+        await readTimeMachineStatus()
         if isTimeMachineRunningToAnotherDisk { return skippedForAnotherDisk(started: started) }
         if isTimeMachineRunning { return alreadyBackingUpToTheDisk() }
         if !byPerson, !settings.allowBackupsOnBattery, system.powerSource == .battery {
@@ -682,7 +684,7 @@ public final class Scheduler {
         // Time Machine started its own backup since the check above. `RESULT` is still the
         // previous backup's, so it says nothing about this one.
         if exitCode == Self.alreadyInProgressExitCode {
-            timeMachineStatus = await system.readTimeMachineStatus()
+            await readTimeMachineStatus()
             if isTimeMachineRunningToAnotherDisk { return skippedForAnotherDisk(started: started) }
             if isTimeMachineRunning { return alreadyBackingUpToTheDisk() }
         }
@@ -804,6 +806,21 @@ public final class Scheduler {
                 history.firstBackupMessagePending = nil
                 system.saveHistory(history)
             }
+        }
+    }
+
+    // MARK: Time Machine's state
+
+    /// Reads whether Time Machine is running, and logs each change of its stage name, so real
+    /// names (including ones the menu doesn't know yet) build up in the log. An unreadable status
+    /// says nothing about the stage, so it's not counted as a change.
+    private func readTimeMachineStatus() async {
+        timeMachineStatus = await system.readTimeMachineStatus()
+        guard timeMachineStatus != .unknown else { return }
+        let phase = timeMachineStatus.phase
+        if phase != lastPhase {
+            system.log("Phase: \(lastPhase ?? "none") -> \(phase ?? "none")")
+            lastPhase = phase
         }
     }
 
