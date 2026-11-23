@@ -11,7 +11,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private let updater: AppUpdater
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     private let statusLineItem = NSMenuItem(title: "Checking Time Machine…", action: nil, keyEquivalent: "")
-    /// While a backup runs: the Mac stays awake until it finishes, so don't close the lid.
     private let stayAwakeItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let nextBackupItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     /// The strip of dots: which recent hours, days or weeks were backed up.
