@@ -22,6 +22,27 @@ struct StatusParserTests {
         #expect(!TimeMachineStatus.idle.isCleaningUp)
     }
 
+    /// Each stage name lands in the group the menu words. Names are matched by how they start.
+    @Test(arguments: [
+        ("status-running-starting.plist", BackupStage.gettingReady),
+        ("status-running-mounting.plist", .gettingReady),
+        ("status-running-mounting-backup-vol.plist", .gettingReady),
+        ("status-running-health-check.plist", .gettingReady),
+        ("status-running-calculating-changes.plist", .gettingReady),
+        ("status-running-finding-changes.plist", .gettingReady),
+        ("status-running-preparing-source-volumes.plist", .gettingReady),
+        ("status-running-copying.plist", .copying),
+        ("status-running-time-remaining.plist", .copying),
+        ("status-running-thinning-pre-backup.plist", .cleaningUp),
+        ("status-running-thinning-post-backup.plist", .cleaningUp),
+        ("status-running-unknown-phase.plist", .unknown),
+        ("status-running-no-phase.plist", .unknown),
+        ("status-idle.plist", .unknown),
+    ])
+    func stageNamesFallIntoGroups(fixtureName: String, stage: BackupStage) throws {
+        #expect(TimeMachineStatus(statusOutput: try fixture(fixtureName)).stage == stage)
+    }
+
     @Test func aRunningBackupWithoutADestinationIDStillCounts() {
         let output = "<plist version=\"1.0\"><dict><key>Running</key><true/></dict></plist>"
         #expect(TimeMachineStatus(statusOutput: output) == .running(destinationID: nil))
