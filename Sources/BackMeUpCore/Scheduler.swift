@@ -49,7 +49,7 @@ public final class Scheduler {
 
     private var timeMachineStatus = TimeMachineStatus.unknown
     /// The last stage name Time Machine gave, nil for none, to log when it changes.
-    private var lastPhase: String?
+    private var lastPhaseName: String?
     private var progress: BackupProgress?
     /// The first progress seen in the running backup, to estimate the time left from.
     private var progressStart: (date: Date, fraction: Double)?
@@ -818,9 +818,9 @@ public final class Scheduler {
         timeMachineStatus = await system.readTimeMachineStatus()
         guard timeMachineStatus != .unknown else { return }
         let phase = timeMachineStatus.phase
-        if phase != lastPhase {
-            system.log("Phase: \(lastPhase ?? "none") -> \(phase ?? "none")")
-            lastPhase = phase
+        if phase != lastPhaseName {
+            system.log("Phase: \(lastPhaseName ?? "none") -> \(phase ?? "none")")
+            lastPhaseName = phase
         }
     }
 
