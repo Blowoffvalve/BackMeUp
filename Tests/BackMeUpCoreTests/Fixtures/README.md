@@ -10,6 +10,7 @@ In `defaults-timemachine-*.txt`, other UUIDs become `00000000-0000-0000-0000-000
 |---|---|---|
 | `status-idle.plist` | `tmutil status -X` | Real, macOS 27.2, no backup running |
 | `status-running-mounting.plist` | `tmutil status -X` | Real, macOS 27.2, early in a backup to a network disk (`BackupPhase` `MountingDiskImage`, `Percent` -1) |
+| `status-running-thinning-post-backup.plist` | `tmutil status -X` | Real, macOS 27.2, a network backup that has finished copying and is cleaning up old backups (`BackupPhase` `ThinningPostBackup`, `Percent` -1). Ran for over an hour; `tmutil startbackup` can't start a backup meanwhile |
 | `status-running-copying.plist` | `tmutil status -X` | Real, macOS 27.2, a network backup in the Copying phase, with `Progress` and `FractionOfProgressBar`. Top-level `Percent` is absent here |
 | `status-running-time-remaining.plist` | `tmutil status -X` | Real, macOS 27.2, a later capture of the same network backup in the Copying phase. `Progress` also has `TimeRemaining` (seconds) |
 | `status-running-time-machine-shows-20.8.plist` | `tmutil status -X` | Real, macOS 27.2, a network backup in the Copying phase, captured while Time Machine's menu showed "20.8% done". `Percent` is 0.1197 and `FractionOfProgressBar` 0.9: Time Machine shows 10% + 0.9 × `Percent`. Destination, mount point and date replaced; `TimeRemaining` removed |

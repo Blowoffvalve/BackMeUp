@@ -7,9 +7,19 @@ struct StatusParserTests {
         #expect(TimeMachineStatus(statusOutput: try fixture("status-idle.plist")) == .idle)
     }
 
-    @Test(arguments: ["status-running-mounting.plist", "status-running-copying.plist"])
-    func runningBackupNamesItsDisk(fixtureName: String) throws {
-        #expect(TimeMachineStatus(statusOutput: try fixture(fixtureName)) == .running(destinationID: "00000000-0000-0000-0000-000000000001"))
+    @Test(arguments: [
+        ("status-running-mounting.plist", "MountingDiskImage"),
+        ("status-running-copying.plist", "Copying"),
+        ("status-running-thinning-post-backup.plist", "ThinningPostBackup"),
+    ])
+    func runningBackupNamesItsDiskAndPhase(fixtureName: String, phase: String) throws {
+        #expect(TimeMachineStatus(statusOutput: try fixture(fixtureName)) == .running(destinationID: "00000000-0000-0000-0000-000000000001", phase: phase))
+    }
+
+    @Test func thinningIsCleaningUp() throws {
+        #expect(TimeMachineStatus(statusOutput: try fixture("status-running-thinning-post-backup.plist")).isCleaningUp)
+        #expect(!TimeMachineStatus(statusOutput: try fixture("status-running-copying.plist")).isCleaningUp)
+        #expect(!TimeMachineStatus.idle.isCleaningUp)
     }
 
     @Test func aRunningBackupWithoutADestinationIDStillCounts() {
