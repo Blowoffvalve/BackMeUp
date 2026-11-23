@@ -11,6 +11,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private let updater: AppUpdater
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     private let statusLineItem = NSMenuItem(title: "Checking Time Machine…", action: nil, keyEquivalent: "")
+    /// While a backup runs: the Mac stays awake until it finishes, so don't close the lid.
+    private let stayAwakeItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let nextBackupItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     /// The strip of dots: which recent hours, days or weeks were backed up.
     private let stripItem = NSMenuItem()
@@ -45,6 +47,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         let menu = NSMenu()
         menu.autoenablesItems = false
         statusLineItem.isEnabled = false
+        stayAwakeItem.isEnabled = false
+        stayAwakeItem.isHidden = true
         nextBackupItem.isEnabled = false
         backUpNowItem.target = self
         let settingsItem = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
@@ -54,6 +58,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         stripItem.view = stripView
         stripItem.isHidden = true
         menu.addItem(statusLineItem)
+        menu.addItem(stayAwakeItem)
         menu.addItem(stripItem)
         menu.addItem(nextBackupItem)
         menu.addItem(.separator())
@@ -174,6 +179,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     private func draw() {
         statusLineItem.title = scheduler.statusLine
+        stayAwakeItem.title = scheduler.stayAwakeNote
+        stayAwakeItem.isHidden = scheduler.stayAwakeNote.isEmpty
         nextBackupItem.title = scheduler.nextBackupLine
         stripView.strip = scheduler.backupStrip
         stripItem.isHidden = !scheduler.backupStrip.isShown
