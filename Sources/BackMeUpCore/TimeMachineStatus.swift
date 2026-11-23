@@ -31,11 +31,6 @@ extension TimeMachineStatus {
 
     /// The group the running backup's stage falls into. `.unknown` when nothing runs.
     public var stage: BackupStage { BackupStage(phase: phase) }
-
-    /// Whether Time Machine is deleting old backups to make room (`ThinningPreBackup` or
-    /// `ThinningPostBackup`). It shows "Cleaning up…" then. A backup can't be started meanwhile,
-    /// and on a network disk it can take over an hour.
-    public var isCleaningUp: Bool { stage == .cleaningUp }
 }
 
 /// The stages of a Time Machine backup, grouped as the menu words them. Apple doesn't document
@@ -45,7 +40,8 @@ public enum BackupStage: Equatable, Sendable {
     /// Before copying starts. Time Machine's menu says "Preparing to back up".
     case gettingReady
     case copying
-    /// Deleting old backups (`Thinning…`).
+    /// Deleting old backups (`Thinning…`). A backup can't be started meanwhile, and on a network
+    /// disk it can take over an hour.
     case cleaningUp
     /// Any other name, or none: the menu claims nothing about it.
     case unknown

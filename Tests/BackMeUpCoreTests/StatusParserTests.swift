@@ -17,9 +17,9 @@ struct StatusParserTests {
     }
 
     @Test func thinningIsCleaningUp() throws {
-        #expect(TimeMachineStatus(statusOutput: try fixture("status-running-thinning-post-backup.plist")).isCleaningUp)
-        #expect(!TimeMachineStatus(statusOutput: try fixture("status-running-copying.plist")).isCleaningUp)
-        #expect(!TimeMachineStatus.idle.isCleaningUp)
+        #expect(TimeMachineStatus(statusOutput: try fixture("status-running-thinning-post-backup.plist")).stage == .cleaningUp)
+        #expect(TimeMachineStatus(statusOutput: try fixture("status-running-copying.plist")).stage != .cleaningUp)
+        #expect(TimeMachineStatus.idle.stage != .cleaningUp)
     }
 
     /// Each stage name lands in the group the menu words. Names are matched by how they start.
