@@ -459,6 +459,7 @@ struct BackupStripTests {
     @Test func theCurrentSlotShowsProgressWhileBackingUp() async {
         let harness = harnessWithNetworkDisk(snapshots: [Self.minutes(-15 * 60)])
         harness.system.nextBackup = .lasting(minutes: 600)
+        harness.system.startedBackupPhase = "Copying"
         harness.at(minutes: 5) { $0.backupProgress = BackupProgress(fraction: 0.352, timeRemaining: 3 * 3600) }
 
         await harness.start()

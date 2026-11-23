@@ -17,10 +17,13 @@ struct ProgressLineTests {
     @Test func theFirstBackupShowsTimeMachinesProgressAndTimeLeft() async {
         let harness = harnessWithNetworkDisk()
         harness.system.nextBackup = .lasting(minutes: 600)
-        harness.at(minutes: 5) { $0.backupProgress = BackupProgress(fraction: 0.352, timeRemaining: 3 * 3600 - 200) }
+        harness.at(minutes: 5) {
+            $0.startedBackupPhase = "Copying"
+            $0.backupProgress = BackupProgress(fraction: 0.352, timeRemaining: 3 * 3600 - 200)
+        }
 
         await harness.start()
-        #expect(harness.statusLine == "Backing up now")
+        #expect(harness.statusLine == "Getting ready for first backup")
 
         await harness.advance(minutes: 5)
         #expect(harness.statusLine == "First backup: 35.2%, about 3 hours left")
@@ -31,6 +34,7 @@ struct ProgressLineTests {
         let harness = harnessWithNetworkDisk()
         await harness.start() // the first backup succeeds
         harness.system.nextBackup = .lasting(minutes: 30)
+        harness.system.startedBackupPhase = "Copying"
         harness.system.backupProgress = BackupProgress(fraction: 0.5, timeRemaining: 20 * 60)
 
         await harness.backUpNow()
@@ -51,7 +55,7 @@ struct ProgressLineTests {
     @Test(arguments: timesLeft)
     func timeLeftIsRoundedToSomethingReadable(seconds: TimeInterval, expected: String) async {
         let harness = harnessWithNetworkDisk()
-        harness.system.timeMachineStatus = .running(destinationID: nil)
+        harness.system.timeMachineStatus = .running(destinationID: nil, phase: "Copying")
         harness.system.backupProgress = BackupProgress(fraction: 0.5, timeRemaining: seconds)
 
         await harness.scheduler.refreshStatus()
@@ -63,6 +67,7 @@ struct ProgressLineTests {
         // macOS doesn't always report `TimeRemaining`.
         let harness = harnessWithNetworkDisk()
         harness.system.nextBackup = .lasting(minutes: 600)
+        harness.system.startedBackupPhase = "Copying"
         harness.at(minutes: 10) { $0.backupProgress = BackupProgress(fraction: 0.10) }
         harness.at(minutes: 40) { $0.backupProgress = BackupProgress(fraction: 0.20) }
 
@@ -76,7 +81,7 @@ struct ProgressLineTests {
 
     @Test func aTimeMachineBackupBackMeUpDidNotStartShowsProgressToo() async {
         let harness = harnessWithNetworkDisk()
-        harness.system.timeMachineStatus = .running(destinationID: nil)
+        harness.system.timeMachineStatus = .running(destinationID: nil, phase: "Copying")
         harness.system.backupProgress = BackupProgress(fraction: 0.9, timeRemaining: 120)
 
         await harness.start()

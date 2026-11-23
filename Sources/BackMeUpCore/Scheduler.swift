@@ -837,13 +837,21 @@ public final class Scheduler {
         onChange?()
     }
 
+    /// The running backup's stage, for the menu. A backup BackMeUp has started is getting ready
+    /// until Time Machine reports it running with a stage name, so the line doesn't flip between
+    /// phrases while Time Machine catches up.
+    private var backupStage: BackupStage {
+        if isBackingUp, timeMachineStatus.phase == nil { return .gettingReady }
+        return timeMachineStatus.stage
+    }
+
     private func updateLines() {
         let text = MenuText(
             history: history,
             nextBackupDue: nextBackupDue,
             isBackingUp: isBackingUp || isTimeMachineRunningToChosenDisk,
             isBackingUpToAnotherDisk: !isBackingUp && isTimeMachineRunningToAnotherDisk,
-            isCleaningUp: timeMachineStatus.isCleaningUp,
+            stage: backupStage,
             progress: progress,
             timeLeft: timeLeft,
             isWaitingForSetup: checklist?.allowsBackups == false,
