@@ -45,7 +45,7 @@ Skips never count as failures. Each attempt is recorded in `BackupHistory` with 
 
 An unreadable `destinationinfo` changes nothing.
 
-**Sleep prevention:** an IOKit assertion stops idle sleep only while BackMeUp's backup command runs on AC power. A power-source watcher releases it the moment the Mac is unplugged, without waiting for the next tick.
+**Sleep prevention:** an IOKit assertion stops idle sleep only while BackMeUp's backup command runs on AC power. A power-source watcher releases it the moment the Mac is unplugged, without waiting for the next tick. Separately, Time Machine itself holds the Mac awake for the whole of any backup, on AC power and on battery, whoever started it; only closing the lid stops it. So while a backup runs, to the chosen disk or another, the menu shows a note under its first line saying the Mac will stay awake until the backup finishes and not to close the lid.
 
 ## The System port
 

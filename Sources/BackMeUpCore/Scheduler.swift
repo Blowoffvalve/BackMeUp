@@ -27,10 +27,13 @@ public final class Scheduler {
 
     /// The menu's first line: the last backup, or what went wrong with it.
     public private(set) var statusLine = ""
-    /// The menu's second line: when the next backup is planned.
+    /// The menu's last status line, under the strip of dots: when the next backup is planned.
     public private(set) var nextBackupLine = ""
-    /// The strip of dots between those two lines: which recent hours, days or weeks (the backup
-    /// interval's unit) were backed up.
+    /// The note under the first line while any Time Machine backup runs, to the chosen disk or
+    /// another: the Mac stays awake until it finishes, so don't close the lid. Empty otherwise.
+    public private(set) var stayAwakeNote = ""
+    /// The strip of dots, between the first line (or the stay-awake note under it) and the next
+    /// backup line: which recent hours, days or weeks (the backup interval's unit) were backed up.
     public private(set) var backupStrip = BackupStrip.hidden
 
     /// The first-run checklist as of the last tick or refresh, or nil before the first one.
@@ -846,6 +849,7 @@ public final class Scheduler {
         )
         statusLine = text.statusLine
         nextBackupLine = text.nextBackupLine
+        stayAwakeNote = text.stayAwakeNote
         networkLine = text.networkLine
         backupStrip = BackupStripText(
             history: history,
