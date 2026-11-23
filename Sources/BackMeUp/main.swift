@@ -12,6 +12,7 @@ MainActor.assumeIsolated {
             print(scheduler.statusLine)
             print(scheduler.nextBackupLine)
             print(scheduler.networkLine)
+            print("Back Up Now: " + (scheduler.backUpNowUnavailableReason.map { "unavailable (\($0))" } ?? "available"))
             for item in scheduler.checklist?.items ?? [] {
                 print("Check \(item.check.rawValue) (\(item.state)): \(item.sentence)")
             }

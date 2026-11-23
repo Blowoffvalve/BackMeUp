@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>BackupPhase</key>
+	<string>ThinningPostBackup</string>
+	<key>ClientID</key>
+	<string>com.apple.backupd</string>
+	<key>DateOfStateChange</key>
+	<date>2026-11-22T02:16:16Z</date>
+	<key>DestinationID</key>
+	<string>00000000-0000-0000-0000-000000000001</string>
+	<key>DestinationMountPoint</key>
+	<string>/Volumes/Backups of Mac</string>
+	<key>Percent</key>
+	<real>-1</real>
+	<key>Running</key>
+	<true/>
+	<key>attemptOptions</key>
+	<integer>0</integer>
+</dict>
+</plist>
+
