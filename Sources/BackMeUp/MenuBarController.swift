@@ -184,7 +184,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         stripView.strip = scheduler.backupStrip
         stripItem.isHidden = !scheduler.backupStrip.isShown
         nextBackupItem.isHidden = scheduler.nextBackupLine.isEmpty
-        backUpNowItem.isEnabled = !scheduler.isBackingUp
+        let unavailableReason = scheduler.backUpNowUnavailableReason
+        backUpNowItem.isEnabled = !scheduler.isBackingUp && unavailableReason == nil
+        backUpNowItem.toolTip = unavailableReason
+        if #available(macOS 14.4, *) { backUpNowItem.subtitle = unavailableReason }
         networkItem.title = scheduler.networkLine
         networkItem.isHidden = scheduler.networkLine.isEmpty
         allowNetworkItem.isHidden = !scheduler.canAllowCurrentNetwork
