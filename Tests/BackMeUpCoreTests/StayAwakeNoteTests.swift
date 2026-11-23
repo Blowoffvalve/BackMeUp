@@ -53,12 +53,30 @@ struct StayAwakeNoteTests {
         #expect(harness.stayAwakeNote == "")
     }
 
-    @Test func goesOnceTheBackupHasFinished() async {
-        let harness = harnessWithNetworkDisk()
+    /// Time Machine holds the Mac awake for any backup, whoever started it and whichever disk it
+    /// goes to, so the note shows for a backup to a disk other than the chosen one too.
+    @Test func showsWhileTimeMachineBacksUpToAnotherDiskOnBattery() async {
+        let harness = SchedulerHarness()
+        harness.system.destinationInfo = .several([
+            Destination(kind: .local, id: "usb-id", name: "Old Disk", mountPoint: "/Volumes/Old Disk"),
+            Destination(kind: .network, id: "network-id", name: "New Disk"),
+        ])
+        harness.system.preferences = TimeMachinePreferences(autoBackup: false, destinations: [
+            .init(id: "usb-id", encryption: .notEncrypted, result: 0),
+            .init(id: "network-id", encryption: .encrypted, result: 0),
+        ])
+        harness.system.powerSource = .battery
+        harness.system.timeMachineStatus = .running(destinationID: "usb-id")
+        harness.at(minutes: 30) { $0.timeMachineStatus = .idle }
+        await harness.start()
+        await harness.scheduler.chooseDisk(id: "network-id")
+        await harness.advance(minutes: 1)
 
-        await harness.start() // the first backup succeeds
+        #expect(harness.statusLine == "Time Machine is backing up to another disk")
+        #expect(harness.stayAwakeNote == Self.note)
 
-        #expect(harness.statusLine == "Last backup: today 00:20")
+        await harness.advance(minutes: 30)
+        #expect(harness.statusLine != "Time Machine is backing up to another disk")
         #expect(harness.stayAwakeNote == "")
     }
 

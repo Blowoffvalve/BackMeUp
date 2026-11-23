@@ -40,7 +40,7 @@ struct MenuText {
         }
     }
 
-    /// The second line: when the next backup is planned. Empty while backing up.
+    /// The line under the strip of dots: when the next backup is planned. Empty while backing up.
     var nextBackupLine: String {
         if isBackingUp || isBackingUpToAnotherDisk { return "" }
         if isWaitingForSetup { return "Backups start once setup is finished" }
@@ -52,10 +52,11 @@ struct MenuText {
         return nextBackupDue <= dates.now ? "\(label): now" : "\(label): \(dates.describe(nextBackupDue))"
     }
 
-    /// The note under the first line while a backup runs. Time Machine keeps the Mac from idle
-    /// sleep for the whole backup, on battery too; only closing the lid stops it. Empty otherwise.
+    /// The note under the first line while any Time Machine backup runs, whoever started it and
+    /// whichever disk it goes to. Time Machine keeps the Mac from idle sleep for the whole backup,
+    /// on battery too; only closing the lid stops it. Empty otherwise.
     var stayAwakeNote: String {
-        isBackingUp ? "Your Mac will stay awake until this backup finishes. Don't close the lid." : ""
+        isBackingUp || isBackingUpToAnotherDisk ? "Your Mac will stay awake until this backup finishes. Don't close the lid." : ""
     }
 
     /// The network line: the current network's label and whether backups may run on it. Never
