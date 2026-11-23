@@ -51,11 +51,11 @@ An unreadable `destinationinfo` changes nothing.
 
 | Stage | Chosen disk | First backup | Another disk |
 |---|---|---|---|
-| Getting ready: `Starting…`, `Mounting…`, `HealthCheck…`, `Calculating…`, `Finding…`, `Preparing…`; or a backup BackMeUp started before Time Machine names a stage | Getting ready to back up | Getting ready for first backup | Time Machine is getting ready to back up to another disk |
+| Getting ready: `Starting…`, `Mounting…`, `HealthCheck…`, `Calculating…`, `Finding…`, `Preparing…`; or a backup BackMeUp started, before Time Machine reports it running | Getting ready to back up | Getting ready for first backup | Time Machine is getting ready to back up to another disk |
 | `Copying`, percent known | Backing up: 4.5%, about 3 hours left | First backup: 4.5%, about 3 hours left | Time Machine is backing up to another disk |
 | `Copying`, no percent yet | Backing up | First backup | Time Machine is backing up to another disk |
 | `Thinning…` | Time Machine is cleaning up old backups | same | Time Machine is cleaning up another disk |
-| Any other name, or none | Time Machine is working on a backup | Time Machine is working on the first backup | Time Machine is working on another disk |
+| Running, with any other name or none (BackMeUp's own backups too) | Time Machine is working on a backup | Time Machine is working on the first backup | Time Machine is working on another disk |
 
 "First backup" shows until a backup has succeeded. The percent and time left show only while copying, once Time Machine gives them. Each change of stage name is logged as `Phase: <old> -> <new>` ("none" for no name), so names the table doesn't cover yet show up in the log.
 
