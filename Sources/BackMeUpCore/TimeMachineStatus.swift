@@ -39,6 +39,7 @@ extension TimeMachineStatus {
 public enum BackupStage: Equatable, Sendable {
     /// Before copying starts. Time Machine's menu says "Preparing to back up".
     case gettingReady
+    /// Copying files (`Copying`). Only then does Time Machine give a percent.
     case copying
     /// Deleting old backups (`Thinning…`). A backup can't be started meanwhile, and on a network
     /// disk it can take over an hour.

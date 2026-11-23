@@ -91,6 +91,7 @@ struct MenuText {
     /// Whether Time Machine is deleting old backups, to whichever disk it's backing up to.
     private var isCleaningUp: Bool { stage == .cleaningUp }
 
+    /// Whether no backup has succeeded yet, so the line says "first backup".
     private var isFirstBackup: Bool { history.lastSuccess == nil }
 
     /// A backup to the chosen disk, in BackMeUp's words but never claiming more than Time Machine's
