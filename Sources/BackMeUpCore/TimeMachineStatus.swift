@@ -23,11 +23,46 @@ extension TimeMachineStatus {
             : .idle
     }
 
-    /// Whether Time Machine is deleting old backups to make room (`ThinningPreBackup` or
-    /// `ThinningPostBackup`). It shows "Cleaning up…" then. A backup can't be started meanwhile,
-    /// and on a network disk it can take over an hour.
-    public var isCleaningUp: Bool {
-        guard case let .running(_, phase?) = self else { return false }
-        return phase.hasPrefix("Thinning")
+    /// The stage name Time Machine gives while running (`BackupPhase`), or nil.
+    public var phase: String? {
+        guard case let .running(_, phase) = self else { return nil }
+        return phase
+    }
+
+    /// The group the running backup's stage falls into. `.unknown` when nothing runs.
+    public var stage: BackupStage { BackupStage(phase: phase) }
+}
+
+/// The stages of a Time Machine backup, grouped as the menu words them. Apple doesn't document
+/// `BackupPhase`; names are matched by how they start, so variants such as
+/// `MountingBackupVolForHealthCheck` fall into the same group.
+public enum BackupStage: Equatable, Sendable {
+    /// Before copying starts. Time Machine's menu says "Preparing to back up".
+    case gettingReady
+    /// Copying files (`Copying`). Only then does Time Machine give a percent.
+    case copying
+    /// Deleting old backups (`Thinning…`). A backup can't be started meanwhile, and on a network
+    /// disk it can take over an hour.
+    case cleaningUp
+    /// Any other name, or none: the menu claims nothing about it.
+    case unknown
+
+    /// Every name these match comes before copying, so "getting ready" never overstates.
+    private static let gettingReadyPrefixes = ["Starting", "Mounting", "HealthCheck", "Calculating", "Finding", "Preparing"]
+
+    public init(phase: String?) {
+        guard let phase else {
+            self = .unknown
+            return
+        }
+        if phase == "Copying" {
+            self = .copying
+        } else if phase.hasPrefix("Thinning") {
+            self = .cleaningUp
+        } else if Self.gettingReadyPrefixes.contains(where: phase.hasPrefix) {
+            self = .gettingReady
+        } else {
+            self = .unknown
+        }
     }
 }

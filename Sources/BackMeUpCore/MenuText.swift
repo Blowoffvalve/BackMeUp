@@ -8,8 +8,8 @@ struct MenuText {
     var isBackingUp: Bool
     /// Whether Time Machine is backing up to a disk other than the chosen one, started from its own menu.
     var isBackingUpToAnotherDisk: Bool = false
-    /// Whether Time Machine is deleting old backups, to whichever disk it's backing up to.
-    var isCleaningUp: Bool = false
+    /// The stage of the running backup, to whichever disk it's going: what the line may claim.
+    var stage: BackupStage = .unknown
     var progress: BackupProgress?
     /// The time left in the running backup, if it can be told.
     var timeLeft: TimeInterval?
@@ -24,10 +24,8 @@ struct MenuText {
 
     /// The first line: the last backup, or what went wrong with it.
     var statusLine: String {
-        if isBackingUp { return isCleaningUp ? "Time Machine is cleaning up old backups" : progressLine }
-        if isBackingUpToAnotherDisk {
-            return isCleaningUp ? "Time Machine is cleaning up another disk" : "Time Machine is backing up to another disk"
-        }
+        if isBackingUp { return backingUpLine }
+        if isBackingUpToAnotherDisk { return anotherDiskLine }
         if isWaitingForSetup { return "Finish setting up: see the checklist" }
         switch history.attempts.last?.outcome {
         case let .failed(reason)?:
@@ -90,10 +88,38 @@ struct MenuText {
         }
     }
 
-    /// "First backup: 35.0%, about 3 hours left", or "Backing up now" before Time Machine says.
+    /// Whether Time Machine is deleting old backups, to whichever disk it's backing up to.
+    private var isCleaningUp: Bool { stage == .cleaningUp }
+
+    /// Whether no backup has succeeded yet, so the line says "first backup".
+    private var isFirstBackup: Bool { history.lastSuccess == nil }
+
+    /// A backup to the chosen disk, in BackMeUp's words but never claiming more than Time Machine's
+    /// stage does. "First backup" in every stage until a backup has succeeded.
+    private var backingUpLine: String {
+        switch stage {
+        case .gettingReady: isFirstBackup ? "Getting ready for first backup" : "Getting ready to back up"
+        case .copying: progressLine
+        case .cleaningUp: "Time Machine is cleaning up old backups"
+        case .unknown: isFirstBackup ? "Time Machine is working on the first backup" : "Time Machine is working on a backup"
+        }
+    }
+
+    /// A backup to a disk other than the chosen one. Its progress isn't shown.
+    private var anotherDiskLine: String {
+        switch stage {
+        case .gettingReady: "Time Machine is getting ready to back up to another disk"
+        case .copying: "Time Machine is backing up to another disk"
+        case .cleaningUp: "Time Machine is cleaning up another disk"
+        case .unknown: "Time Machine is working on another disk"
+        }
+    }
+
+    /// While copying: "First backup: 35.0%, about 3 hours left", or "Backing up" before Time
+    /// Machine gives a percent.
     private var progressLine: String {
-        guard let progress else { return "Backing up now" }
-        let label = history.lastSuccess == nil ? "First backup" : "Backing up"
+        let label = isFirstBackup ? "First backup" : "Backing up"
+        guard let progress else { return label }
         let percent = "\(label): \(progress.percentText)"
         return timeLeft.map { "\(percent), \(Self.describe(timeLeft: $0))" } ?? percent
     }

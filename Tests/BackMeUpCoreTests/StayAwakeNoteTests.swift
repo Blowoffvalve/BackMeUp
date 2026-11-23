@@ -21,14 +21,14 @@ struct StayAwakeNoteTests {
 
         await harness.start()
 
-        #expect(harness.statusLine == "Backing up now")
+        #expect(harness.statusLine == "Time Machine is working on the first backup")
         #expect(harness.stayAwakeNote == Self.note)
     }
 
     @Test func showsUnderTheFirstBackupsProgressOnBattery() async {
         let harness = harnessWithNetworkDisk()
         harness.system.powerSource = .battery
-        harness.system.timeMachineStatus = .running(destinationID: nil)
+        harness.system.timeMachineStatus = .running(destinationID: nil, phase: "Copying")
         harness.system.backupProgress = BackupProgress(fraction: 0.352, timeRemaining: nil)
 
         await harness.start()
@@ -41,6 +41,7 @@ struct StayAwakeNoteTests {
         let harness = harnessWithNetworkDisk()
         await harness.start() // the first backup succeeds
         harness.system.nextBackup = .lasting(minutes: 30)
+        harness.system.startedBackupPhase = "Copying"
         harness.system.backupProgress = BackupProgress(fraction: 0.5, timeRemaining: 20 * 60)
 
         await harness.backUpNow()
@@ -66,7 +67,7 @@ struct StayAwakeNoteTests {
             .init(id: "network-id", encryption: .encrypted, result: 0),
         ])
         harness.system.powerSource = .battery
-        harness.system.timeMachineStatus = .running(destinationID: "usb-id")
+        harness.system.timeMachineStatus = .running(destinationID: "usb-id", phase: "Copying")
         harness.at(minutes: 30) { $0.timeMachineStatus = .idle }
         await harness.start()
         await harness.scheduler.chooseDisk(id: "network-id")

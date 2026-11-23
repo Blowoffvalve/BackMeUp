@@ -94,7 +94,7 @@ While a backup runs on power, BackMeUp keeps your Mac awake. Closing the lid sti
 
 Click the house icon in the menu bar. From top to bottom, the menu shows:
 
-- **How your backups are doing.** For example "Last backup: today 14:02", "Backing up: 35.2%, about 3 hours left" (the same percentage Time Machine shows), "Last backup failed: …", "Waiting for a chosen network" or "Finish setting up: see the checklist".
+- **How your backups are doing.** For example "Last backup: today 14:02", "Getting ready to back up" then "Backing up: 35.2%, about 3 hours left" (following the stage and percentage Time Machine shows), "Last backup failed: …", "Waiting for a chosen network" or "Finish setting up: see the checklist".
 - **When the next backup is.** For example "Next backup: tomorrow 14:02", "Next try: today 15:30" after a problem, or "Resumes: …" for a paused first backup.
 - **The network you're on**, and whether backups may run on it. For example "Network: Home (backups allowed)" or "Network: Café (not chosen)".
 - **Allow backups on this network.** Only shown when you're on a network you haven't chosen. If macOS asks to use your location, that's only so BackMeUp can show the Wi-Fi name. If you say no, BackMeUp asks you to type a name, such as Home.

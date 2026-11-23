@@ -171,7 +171,7 @@ struct ChooseDiskTests {
         let harness = harnessWithTwoDisks()
         await harness.start()
         await harness.scheduler.chooseDisk(id: "network-id")
-        harness.system.timeMachineStatus = .running(destinationID: runningTo)
+        harness.system.timeMachineStatus = .running(destinationID: runningTo, phase: "Copying")
         harness.system.backupProgress = BackupProgress(fraction: 0.5, timeRemaining: 120)
 
         await harness.scheduler.refreshStatus()
@@ -183,7 +183,7 @@ struct ChooseDiskTests {
     /// without counting it as its own, then backs up to the chosen disk once it's over.
     @Test func aBackupToAnotherDiskIsWaitedForAndNotCounted() async {
         let harness = harnessWithTwoDisks()
-        harness.system.timeMachineStatus = .running(destinationID: "usb-id")
+        harness.system.timeMachineStatus = .running(destinationID: "usb-id", phase: "Copying")
         harness.system.backupProgress = BackupProgress(fraction: 0.5, timeRemaining: 120)
         harness.at(minutes: 30) { $0.timeMachineStatus = .idle }
         await harness.start()
@@ -209,7 +209,7 @@ struct ChooseDiskTests {
         let harness = harnessWithTwoDisks()
         await harness.start()
         await harness.scheduler.chooseDisk(id: "network-id")
-        harness.system.timeMachineStatus = .running(destinationID: "usb-id")
+        harness.system.timeMachineStatus = .running(destinationID: "usb-id", phase: "Copying")
         harness.at(minutes: 30) { $0.timeMachineStatus = .idle }
 
         await harness.backUpNow()
@@ -228,7 +228,7 @@ struct ChooseDiskTests {
     /// With one disk nothing is chosen, so any backup Time Machine names is shown, as before.
     @Test func withOneDiskEveryRunningBackupShowsAsBefore() async {
         let harness = SchedulerHarness()
-        harness.system.timeMachineStatus = .running(destinationID: "some-other-id")
+        harness.system.timeMachineStatus = .running(destinationID: "some-other-id", phase: "Copying")
         harness.system.backupProgress = BackupProgress(fraction: 0.5, timeRemaining: 120)
 
         await harness.start()
@@ -246,7 +246,7 @@ struct ChooseDiskTests {
         #expect(harness.system.startedBackups == [harness.minutes(1)])
 
         // A day later the next backup is due, but Time Machine is busy with the old disk.
-        harness.at(minutes: 23 * 60) { $0.timeMachineStatus = .running(destinationID: "usb-id") }
+        harness.at(minutes: 23 * 60) { $0.timeMachineStatus = .running(destinationID: "usb-id", phase: "Copying") }
         harness.at(minutes: 25 * 60) { $0.timeMachineStatus = .idle }
         // The first backup ended at minute 21; stop a minute before the other disk's backup ends.
         await harness.advance(minutes: 25 * 60 - 22)

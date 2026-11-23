@@ -40,12 +40,24 @@ Skips never count as failures. Each attempt is recorded in `BackupHistory` with 
 
 - **A disk is added:** while there's one disk BackMeUp saves it as the last-used disk (`SetupState.lastUsedDiskID`) at each backup, so when a second disk appears, now or while BackMeUp was quit, that disk is kept as the choice, without an alert, and check 1 says "Time Machine has a new disk. BackMeUp still backs up to <name>." until the user chooses (saved, so it survives restarts). Versions before this never saved the last-used disk, so the first launch after that update with several disks and none chosen asks instead, with the alert below.
 - **The chosen disk is removed:** the choice is cleared and logged, backups pause and check 1 asks ("The disk you chose is no longer in Time Machine…"), even with one disk left; it never falls back to an earlier disk. `SetupState.chosenDiskRemoved` keeps this across restarts. Choosing the one disk left still passes `--destination`. With no disk left, check 1 says "Set up a Time Machine disk" instead and no alert is sent.
-- **Another disk's backup:** while Time Machine backs up to a disk other than the chosen one (started from its own menu), scheduled backups wait for it, its progress isn't shown and the menu says "Time Machine is backing up to another disk". Back Up Now during it is skipped with that reason; a backup due by the interval starts as soon as it ends.
+- **Another disk's backup:** while Time Machine backs up to a disk other than the chosen one (started from its own menu), scheduled backups wait for it, its progress isn't shown and the menu says so, following its stage ("Time Machine is backing up to another disk" while copying; see the status line below). Back Up Now during it is skipped with that reason; a backup due by the interval starts as soon as it ends.
 - **Already backing up to the disk:** when Time Machine is already backing up to the chosen disk (Back Up Now during it, or Time Machine starting its own backup just before BackMeUp's), BackMeUp starts nothing and records nothing: not a failure, a skip or a success. The log says "Backup not started: Time Machine is already backing up to the disk". `tmutil startbackup` gives up at once then, with exit code 3 ("Backup already in progress."), and Time Machine's `RESULT` is still the previous backup's, so it must not be read as this backup's result.
 
 An unreadable `destinationinfo` changes nothing.
 
 **Sleep prevention:** an IOKit assertion stops idle sleep only while BackMeUp's backup command runs on AC power. A power-source watcher releases it the moment the Mac is unplugged, without waiting for the next tick. Separately, Time Machine itself holds the Mac awake for the whole of any backup, on AC power and on battery, whoever started it; only closing the lid stops it. So while a backup runs, to the chosen disk or another, the menu shows a note under its first line saying the Mac will stay awake until the backup finishes and not to close the lid.
+
+**Status line while backing up:** the menu's first line follows the stage Time Machine reports (`BackupPhase` in `tmutil status -X`), in BackMeUp's own words but never claiming more than Time Machine does. `TimeMachineStatus.stage` groups the stage name by how it starts:
+
+| Stage | Chosen disk | First backup | Another disk |
+|---|---|---|---|
+| Getting ready: `Starting…`, `Mounting…`, `HealthCheck…`, `Calculating…`, `Finding…`, `Preparing…`; or a backup BackMeUp started, before Time Machine reports it running | Getting ready to back up | Getting ready for first backup | Time Machine is getting ready to back up to another disk |
+| `Copying`, percent known | Backing up: 4.5%, about 3 hours left | First backup: 4.5%, about 3 hours left | Time Machine is backing up to another disk |
+| `Copying`, no percent yet | Backing up | First backup | Time Machine is backing up to another disk |
+| `Thinning…` | Time Machine is cleaning up old backups | same | Time Machine is cleaning up another disk |
+| Running, with any other name or none (BackMeUp's own backups too) | Time Machine is working on a backup | Time Machine is working on the first backup | Time Machine is working on another disk |
+
+"First backup" shows until a backup has succeeded. The percent and time left show only while copying, once Time Machine gives them. Each change of stage name is logged as `Phase: <old> -> <new>` ("none" for no name), so names the table doesn't cover yet show up in the log.
 
 ## The System port
 

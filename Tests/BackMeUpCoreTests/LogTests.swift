@@ -41,6 +41,45 @@ struct LogTests {
         #expect(harness.system.logLines == ["Backup skipped: not on a chosen network"])
     }
 
+    /// Each change of Time Machine's stage name is logged, so real names, including ones the menu
+    /// doesn't know, build up in the log. Nothing is logged while the stage stays the same.
+    @Test func everyStageChangeIsLogged() async {
+        let harness = harnessWithNetworkDisk()
+        harness.system.nextBackup = .lasting(minutes: 60)
+        harness.at(minutes: 10) { $0.startedBackupPhase = "MountingBackupVolForHealthCheck" }
+        harness.at(minutes: 20) { $0.startedBackupPhase = "Copying" }
+        harness.at(minutes: 40) { $0.startedBackupPhase = "SomeFutureStage" }
+
+        await harness.start()
+        await harness.advance(minutes: 120) // the backup ends at 01:00
+
+        #expect(harness.system.logLines == [
+            "Phase: none -> MountingBackupVolForHealthCheck",
+            "Phase: MountingBackupVolForHealthCheck -> Copying",
+            "Phase: Copying -> SomeFutureStage",
+            "Backup succeeded",
+            "Phase: SomeFutureStage -> none",
+        ])
+    }
+
+    /// Stages of a backup Time Machine runs by itself are logged too.
+    @Test func stagesOfTimeMachinesOwnBackupAreLogged() async {
+        let harness = harnessWithNetworkDisk()
+        await harness.start() // BackMeUp's first backup succeeds
+        harness.at(minutes: 30) { $0.timeMachineStatus = .running(destinationID: "network-id", phase: "Starting") }
+        harness.at(minutes: 40) { $0.timeMachineStatus = .running(destinationID: "network-id", phase: "ThinningPostBackup") }
+        harness.at(minutes: 50) { $0.timeMachineStatus = .idle }
+
+        await harness.advance(minutes: 60)
+
+        #expect(harness.system.logLines == [
+            "Backup succeeded",
+            "Phase: none -> Starting",
+            "Phase: Starting -> ThinningPostBackup",
+            "Phase: ThinningPostBackup -> none",
+        ])
+    }
+
     @Test func showLogOpensTheLog() {
         let harness = SchedulerHarness()
 
