@@ -235,9 +235,10 @@ public struct BackupHistory: Codable, Equatable, Sendable {
         return SinceLastSuccess(attempts[start...])
     }
 
-    public init(lastSuccess: Date? = nil, attempts: [BackupAttempt] = []) {
+    public init(lastSuccess: Date? = nil, attempts: [BackupAttempt] = [], sizes: [BackupSize]? = nil) {
         self.lastSuccess = lastSuccess
         self.attempts = attempts
+        self.sizes = sizes
     }
 
     /// Records an attempt and drops the ones that started more than `keptWeeks` before `now`.
