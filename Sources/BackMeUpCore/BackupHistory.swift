@@ -220,6 +220,9 @@ public struct BackupHistory: Codable, Equatable, Sendable {
     /// Set while Time Machine is stuck (`FailureReason.timeMachineStuck`); cleared by the next
     /// success.
     public var stuck: StuckRecord?
+    /// How much each backup to the chosen disk that BackMeUp watched finish copied, oldest first,
+    /// whoever started it. Kept as long as attempts. nil in history saved before sizes existed.
+    public private(set) var sizes: [BackupSize]?
     /// The tally since the last success, as stored. nil in history saved before it existed; see
     /// `sinceLastSuccess`.
     private var storedSinceLastSuccess: SinceLastSuccess?
@@ -232,9 +235,10 @@ public struct BackupHistory: Codable, Equatable, Sendable {
         return SinceLastSuccess(attempts[start...])
     }
 
-    public init(lastSuccess: Date? = nil, attempts: [BackupAttempt] = []) {
+    public init(lastSuccess: Date? = nil, attempts: [BackupAttempt] = [], sizes: [BackupSize]? = nil) {
         self.lastSuccess = lastSuccess
         self.attempts = attempts
+        self.sizes = sizes
     }
 
     /// Records an attempt and drops the ones that started more than `keptWeeks` before `now`.
@@ -243,9 +247,7 @@ public struct BackupHistory: Codable, Equatable, Sendable {
         tally.add(attempt)
         storedSinceLastSuccess = tally
         attempts.append(attempt)
-        if let cutoff = calendar.date(byAdding: .weekOfYear, value: -Self.keptWeeks, to: now) {
-            attempts.removeAll { $0.started < cutoff }
-        }
+        dropOlderThanKeptWeeks(now: now, calendar: calendar)
         if attempts.count > Self.maximumAttempts {
             attempts.removeFirst(attempts.count - Self.maximumAttempts)
         }
@@ -253,6 +255,37 @@ public struct BackupHistory: Codable, Equatable, Sendable {
             lastSuccess = attempt.finished
             stuck = nil
         }
+    }
+}
+
+extension BackupHistory {
+    /// Records how much the backup that finished at `finished` copied, and drops sizes of backups
+    /// that finished more than `keptWeeks` before `now`.
+    mutating func recordSize(_ bytes: Int64, finished: Date, now: Date, calendar: Calendar) {
+        sizes = (sizes ?? []) + [BackupSize(finished: finished, bytes: bytes)]
+        dropOlderThanKeptWeeks(now: now, calendar: calendar)
+    }
+
+    /// Drops attempts that started, and sizes of backups that finished, more than `keptWeeks`
+    /// before `now`.
+    private mutating func dropOlderThanKeptWeeks(now: Date, calendar: Calendar) {
+        guard let cutoff = calendar.date(byAdding: .weekOfYear, value: -Self.keptWeeks, to: now) else { return }
+        attempts.removeAll { $0.started < cutoff }
+        sizes?.removeAll { $0.finished < cutoff }
+    }
+}
+
+/// How much one finished backup copied: Time Machine's total for it, as last seen while copying.
+public struct BackupSize: Codable, Equatable, Sendable {
+    /// A time the backup's dot can show: BackMeUp's finish time for its own backups, and Time
+    /// Machine's snapshot date for every backup (which may be when it began). BackMeUp's own
+    /// backups have a size noted at each.
+    public var finished: Date
+    public var bytes: Int64
+
+    public init(finished: Date, bytes: Int64) {
+        self.finished = finished
+        self.bytes = bytes
     }
 }
 

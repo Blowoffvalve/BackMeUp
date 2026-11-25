@@ -43,6 +43,45 @@ struct ProgressLineTests {
         #expect(harness.statusLine == "Backing up: 50.0%, about 20 minutes left")
     }
 
+    @Test func onceCopyingTheFirstBackupShowsItsTotal() async {
+        let harness = harnessWithNetworkDisk()
+        harness.system.nextBackup = .lasting(minutes: 600)
+        harness.system.startedBackupPhase = "Copying"
+        harness.system.backupProgress = BackupProgress(fraction: 0.208, timeRemaining: 3 * 3600, totalBytes: 251_554_357_248)
+
+        await harness.start()
+        await harness.advance(minutes: 1)
+
+        #expect(harness.statusLine == "First backup: 20.8% of 251.55 GB, about 3 hours left")
+        #expect(harness.scheduler.backupStrip.slots.last?.caption == "Thu 1 Jan: backing up: 20.8% of 251.55 GB")
+        #expect(harness.scheduler.backupStrip.slots.last?.accessibilityLabel == "Thursday 1 January: backing up: 20.8% of 251.55 GB")
+    }
+
+    @Test func laterBackupsShowTheirTotalToo() async {
+        let harness = harnessWithNetworkDisk()
+        await harness.start() // the first backup succeeds
+        harness.system.nextBackup = .lasting(minutes: 30)
+        harness.system.startedBackupPhase = "Copying"
+        harness.system.backupProgress = BackupProgress(fraction: 0.5, totalBytes: 840_000_000)
+
+        await harness.backUpNow()
+        await harness.advance(minutes: 1)
+
+        #expect(harness.statusLine == "Backing up: 50.0% of 840 MB")
+    }
+
+    @Test func nothingIsAddedWhileGettingReady() async {
+        let harness = harnessWithNetworkDisk()
+        harness.system.nextBackup = .lasting(minutes: 600)
+        harness.system.startedBackupPhase = "MountingDiskImage"
+        harness.system.backupProgress = nil
+
+        await harness.start()
+
+        #expect(harness.statusLine == "Getting ready for first backup")
+        #expect(harness.scheduler.backupStrip.slots.last?.caption == "Thu 1 Jan: backing up")
+    }
+
     nonisolated static let timesLeft: [(TimeInterval, String)] = [
         (30, "less than a minute left"),
         (60, "about 1 minute left"),

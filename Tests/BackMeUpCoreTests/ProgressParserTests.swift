@@ -27,6 +27,26 @@ struct ProgressParserTests {
         #expect(progress?.timeRemaining == nil)
     }
 
+    @Test func copyingGivesTheBackupsTotal() throws {
+        let progress = BackupProgress(statusOutput: try fixture("status-running-copying.plist"))
+
+        #expect(progress?.totalBytes == 251_554_357_248)
+    }
+
+    /// The format is undocumented: a missing or non-positive `totalBytes` means no total, never zero.
+    @Test(arguments: [
+        "<plist version=\"1.0\"><dict><key>Running</key><true/><key>Progress</key><dict><key>Percent</key><real>0.35</real></dict></dict></plist>",
+        "<plist version=\"1.0\"><dict><key>Running</key><true/><key>Progress</key><dict><key>Percent</key><real>0.35</real><key>totalBytes</key><integer>0</integer></dict></dict></plist>",
+        "<plist version=\"1.0\"><dict><key>Running</key><true/><key>Progress</key><dict><key>Percent</key><real>0.35</real><key>totalBytes</key><integer>-1</integer></dict></dict></plist>",
+        "<plist version=\"1.0\"><dict><key>Running</key><true/><key>Percent</key><real>0.35</real></dict></plist>",
+    ])
+    func withoutAPositiveTotalThereIsNoTotal(output: String) {
+        let progress = BackupProgress(statusOutput: output)
+
+        #expect(progress != nil)
+        #expect(progress?.totalBytes == nil)
+    }
+
     @Test func withoutFractionOfProgressBarPercentIsUsedAsIs() {
         let output = "<plist version=\"1.0\"><dict><key>Running</key><true/><key>Progress</key><dict><key>Percent</key><real>0.35</real></dict></dict></plist>"
 

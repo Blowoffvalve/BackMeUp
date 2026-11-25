@@ -92,7 +92,8 @@ struct BackupStripText {
                 self.slot(slotInterval, unit, kind, isCurrent: isCurrent, what)
             }
             if let latest = successes.last(where: { $0 >= slotInterval.start && $0 < slotInterval.end }) {
-                return slot(.backedUp) { "backed up \(format(latest, $0.backupTime))" }
+                let copied = size(of: latest).map { ", \(SizeText.describe(bytes: $0)) copied" } ?? ""
+                return slot(.backedUp) { "backed up \(format(latest, $0.backupTime))\(copied)" }
             }
             // With no success in the slot, the last success before any point in it is the last
             // one before it began, so a backup was due in the slot if that one's interval ran out
@@ -108,7 +109,7 @@ struct BackupStripText {
         }
         if isBackingUp, let current = slotIntervals.last, let kind = slots.last?.kind {
             // The same figure as the status line, after the slot's date like every caption.
-            let what = progress.map { "backing up: \($0.percentText)" } ?? "backing up"
+            let what = progress.map { "backing up: \($0.progressText)" } ?? "backing up"
             slots[slots.count - 1] = slot(current, unit, kind, isCurrent: true) { _ in what }
         }
         let backedUp = slots.filter { $0.kind == .backedUp }.count
@@ -117,6 +118,22 @@ struct BackupStripText {
             summary: "Backed up \(backedUp) of the last \(unit.count) \(unit.plural)",
             slots: slots
         )
+    }
+
+    /// How far apart a backup's time and a noted size's can be and still be the same backup. A
+    /// size is noted at every time its backup's dot can show (BackMeUp's finish time and Time
+    /// Machine's date for the backup, which may be when it began, hours earlier), so the times
+    /// match exactly; this only allows for rounding. A wider window could give a backup with no
+    /// size a neighbour's.
+    static let sizeMatchWindow: TimeInterval = 1
+
+    /// How much the backup at `backup` copied: the noted size at its time, within
+    /// `sizeMatchWindow`. nil when BackMeUp didn't watch it finish.
+    private func size(of backup: Date) -> Int64? {
+        (history.sizes ?? [])
+            .filter { abs($0.finished.timeIntervalSince(backup)) <= Self.sizeMatchWindow }
+            .min { abs($0.finished.timeIntervalSince(backup)) < abs($1.finished.timeIntervalSince(backup)) }?
+            .bytes
     }
 
     /// Why a slot with a backup due and none made was missed, from BackMeUp's attempts in it: the
