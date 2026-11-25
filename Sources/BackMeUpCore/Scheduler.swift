@@ -175,6 +175,7 @@ public final class Scheduler {
         currentNetwork = await system.readNetwork()
         await readProgress()
         await readChecklist()
+        noteSizeOfTimeMachinesOwnBackup()
         describe()
     }
 

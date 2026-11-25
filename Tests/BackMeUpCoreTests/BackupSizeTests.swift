@@ -108,6 +108,22 @@ struct BackupSizeTests {
         #expect(today(harness)?.caption == "Thu 1 Jan: backed up 00:29, 840 MB copied")
     }
 
+    @Test func openingTheMenuAsTimeMachinesOwnBackupEndsShowsItsSize() async {
+        let harness = harnessWithNetworkDisk(snapshots: [Self.minutes(-60)])
+        harness.system.storedHistory = BackupHistory(lastSuccess: Self.minutes(-60)) // nothing due
+        harness.system.timeMachineStatus = .running(destinationID: "network-id", phase: "Copying")
+        harness.system.backupProgress = BackupProgress(fraction: 0.5, totalBytes: 840_000_000)
+        await harness.restart()
+        await harness.advance(minutes: 29)
+
+        // It ends between ticks, and the menu is opened before the next one.
+        harness.system.timeMachineStatus = .idle
+        harness.system.preferences?.destinations[0].snapshotDates.append(Self.minutes(29))
+        await harness.scheduler.refreshStatus()
+
+        #expect(today(harness)?.caption == "Thu 1 Jan: backed up 00:29, 840 MB copied")
+    }
+
     @Test func aBackupTimeMachineStartedItselfThatWasStoppedKeepsNone() async {
         let harness = harnessWithNetworkDisk(snapshots: [Self.minutes(-60)])
         harness.system.storedHistory = BackupHistory(lastSuccess: Self.minutes(-60)) // nothing due
