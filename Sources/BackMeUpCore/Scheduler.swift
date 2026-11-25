@@ -51,6 +51,10 @@ public final class Scheduler {
     /// The last stage name Time Machine gave, nil for none, to log when it changes.
     private var lastPhaseName: String?
     private var progress: BackupProgress?
+    /// The running backup to the chosen disk's total, as last seen while copying, and the newest
+    /// backup on the disk when it was first seen, to tell whether a new one appears when it ends.
+    /// Stored as the backup's size once it succeeds; dropped if it doesn't.
+    private var watchedBackup: (totalBytes: Int64, newestBackupBefore: Date?)?
     /// The first progress seen in the running backup, to estimate the time left from.
     private var progressStart: (date: Date, fraction: Double)?
     private var backupTask: Task<Void, Never>?
@@ -132,6 +136,7 @@ public final class Scheduler {
             registerLoginItem()
         }
         await readChecklist()
+        noteSizeOfTimeMachinesOwnBackup()
         if isUpdated { askToChooseDiskAfterUpdateIfNeeded() }
         if !setupState.firstRunDone || isUpdated {
             setupState.firstRunDone = true
@@ -613,6 +618,7 @@ public final class Scheduler {
             let isFirstSuccess = history.lastSuccess == nil && attempt.outcome == .succeeded
             let wasStuck = history.stuck != nil
             history.record(attempt, now: system.now, calendar: calendar)
+            noteSizeOfOwnBackup(attempt)
             system.log(attempt.outcome.logLine)
             if isFirstSuccess, ntfy.isSetUp { history.firstBackupMessagePending = true }
             system.saveHistory(history)
@@ -835,6 +841,40 @@ public final class Scheduler {
         progress = await system.readBackupProgress()
         if let progress, progress.fraction < progressStart?.fraction ?? .infinity {
             progressStart = (system.now, progress.fraction)
+        }
+        if timeMachineStatus.stage == .copying, let totalBytes = progress?.totalBytes {
+            watchedBackup = (totalBytes, watchedBackup.map(\.newestBackupBefore) ?? chosenDiskBackups.max())
+        }
+    }
+
+    /// A backup BackMeUp watched copying, but didn't start, has ended: if it left a new backup on
+    /// the disk, notes its size against that backup's date. BackMeUp's own backups are noted when
+    /// their attempt is recorded.
+    private func noteSizeOfTimeMachinesOwnBackup() {
+        guard let watched = watchedBackup, backupTask == nil, timeMachineStatus != .unknown,
+              !isTimeMachineRunningToChosenDisk
+        else { return }
+        watchedBackup = nil
+        guard let newest = chosenDiskBackups.max(), newest > watched.newestBackupBefore ?? .distantPast,
+              !isUninstalled
+        else { return }
+        history.recordSize(watched.totalBytes, finished: newest, now: system.now, calendar: calendar)
+        system.saveHistory(history)
+    }
+
+    /// BackMeUp's own backup has ended as `outcome`: notes its size if it succeeded. A failed or
+    /// paused backup keeps none; a resumed one is noted afresh from its own run.
+    private func noteSizeOfOwnBackup(_ attempt: BackupAttempt) {
+        switch attempt.outcome {
+        case .succeeded:
+            if let watched = watchedBackup {
+                history.recordSize(watched.totalBytes, finished: attempt.finished, now: system.now, calendar: calendar)
+            }
+            watchedBackup = nil
+        case .failed, .paused:
+            watchedBackup = nil
+        case .skipped:
+            break
         }
     }
 

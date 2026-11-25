@@ -220,6 +220,9 @@ public struct BackupHistory: Codable, Equatable, Sendable {
     /// Set while Time Machine is stuck (`FailureReason.timeMachineStuck`); cleared by the next
     /// success.
     public var stuck: StuckRecord?
+    /// How much each backup to the chosen disk that BackMeUp watched finish copied, oldest first,
+    /// whoever started it. Kept as long as attempts. nil in history saved before sizes existed.
+    public private(set) var sizes: [BackupSize]?
     /// The tally since the last success, as stored. nil in history saved before it existed; see
     /// `sinceLastSuccess`.
     private var storedSinceLastSuccess: SinceLastSuccess?
@@ -246,6 +249,7 @@ public struct BackupHistory: Codable, Equatable, Sendable {
         if let cutoff = calendar.date(byAdding: .weekOfYear, value: -Self.keptWeeks, to: now) {
             attempts.removeAll { $0.started < cutoff }
         }
+        dropSizes(before: now, calendar: calendar)
         if attempts.count > Self.maximumAttempts {
             attempts.removeFirst(attempts.count - Self.maximumAttempts)
         }
@@ -253,6 +257,33 @@ public struct BackupHistory: Codable, Equatable, Sendable {
             lastSuccess = attempt.finished
             stuck = nil
         }
+    }
+}
+
+extension BackupHistory {
+    /// Records how much the backup that finished at `finished` copied, and drops sizes of backups
+    /// that finished more than `keptWeeks` before `now`.
+    mutating func recordSize(_ bytes: Int64, finished: Date, now: Date, calendar: Calendar) {
+        sizes = (sizes ?? []) + [BackupSize(finished: finished, bytes: bytes)]
+        dropSizes(before: now, calendar: calendar)
+    }
+
+    private mutating func dropSizes(before now: Date, calendar: Calendar) {
+        guard sizes != nil, let cutoff = calendar.date(byAdding: .weekOfYear, value: -Self.keptWeeks, to: now) else { return }
+        sizes?.removeAll { $0.finished < cutoff }
+    }
+}
+
+/// How much one finished backup copied: Time Machine's total for it, as last seen while copying.
+public struct BackupSize: Codable, Equatable, Sendable {
+    /// When the backup finished: BackMeUp's finish time for its own backups, Time Machine's
+    /// snapshot date for ones Time Machine started itself.
+    public var finished: Date
+    public var bytes: Int64
+
+    public init(finished: Date, bytes: Int64) {
+        self.finished = finished
+        self.bytes = bytes
     }
 }
 
