@@ -20,6 +20,9 @@ final class FakeSystem: System {
         var runsWhileTimePasses = false
         /// Whether Time Machine records a new snapshot for the disk, as a finished backup does.
         var addsSnapshot = true
+        /// When the new snapshot is dated, in minutes after the backup started. nil dates it when
+        /// the backup ends.
+        var snapshotMinutesAfterStart: Double?
         /// Whether Time Machine started its own backup to this disk just before BackMeUp's command,
         /// so the command gives up straight away and `RESULT` is left as it was.
         var alreadyInProgress = false
@@ -143,7 +146,8 @@ final class FakeSystem: System {
     /// given, or the only one.
     func startBackup(destinationID: String?) async -> Int32? {
         let backup = nextBackup
-        startedBackups.append(now)
+        let started = now
+        startedBackups.append(started)
         startedBackupDestinations.append(destinationID)
         backingUpTo = destinationID
         guard let exitCode = backup.exitCode else { return nil }
@@ -157,7 +161,8 @@ final class FakeSystem: System {
         } else {
             now = end
         }
-        writeResult(backup.result, addingSnapshot: backup.addsSnapshot)
+        let snapshot = backup.snapshotMinutesAfterStart.map { started.addingTimeInterval($0 * 60) } ?? now
+        writeResult(backup.result, addingSnapshot: backup.addsSnapshot ? snapshot : nil)
         if backup.preferencesUnreadableAfterwards { preferences = nil }
         return exitCode
     }
@@ -315,7 +320,8 @@ final class FakeSystem: System {
     /// The `--destination` of the backup running or last run.
     private var backingUpTo: String?
 
-    private func writeResult(_ result: Int?, addingSnapshot: Bool) {
+    /// `addingSnapshot`: the new snapshot's date, nil for none.
+    private func writeResult(_ result: Int?, addingSnapshot snapshot: Date?) {
         // Time Machine backs up to the --destination given, or the only disk.
         let disks = destinationInfo.disks
         guard backingUpTo != nil || disks.count == 1 else { return }
@@ -323,7 +329,7 @@ final class FakeSystem: System {
         var preferences = preferences ?? TimeMachinePreferences(autoBackup: false, destinations: [])
         let entry = preferences.destination(id: id)
         let encryption = entry?.encryption ?? .encrypted
-        let snapshotDates = (entry?.snapshotDates ?? []) + (addingSnapshot ? [now] : [])
+        let snapshotDates = (entry?.snapshotDates ?? []) + [snapshot].compactMap { $0 }
         preferences.destinations.removeAll { $0.id == id }
         preferences.destinations.append(.init(id: id, encryption: encryption, result: result, snapshotDates: snapshotDates))
         self.preferences = preferences

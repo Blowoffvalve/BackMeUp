@@ -40,6 +40,42 @@ struct BackupSizeTests {
         #expect(today(harness)?.accessibilityLabel == "Thursday 1 January: backed up 00:30, 3.2 GB copied")
     }
 
+    @Test func aBackupDatedByTimeMachineLongBeforeItFinishedShowsItsSizeOnBothDots() async {
+        // Time Machine may date a backup when it began, not when it finished: on a long backup
+        // its date and BackMeUp's finish time can be in different slots.
+        let harness = harnessWithNetworkDisk()
+        harness.changeSettings { $0.backupInterval = .init(count: 1, unit: .hours) }
+        scriptBackup(harness, totalBytes: 3_200_000_000)
+        harness.system.nextBackup = .lasting(minutes: 90)
+        harness.system.nextBackup.snapshotMinutesAfterStart = 1
+
+        await harness.start() // backs up 00:00 to 01:30, dated 00:01 by Time Machine
+        await harness.advance(minutes: 100)
+
+        #expect(captions(harness).suffix(2) == [
+            "Thu 1 Jan 00:00: backed up 00:01, 3.2 GB copied",
+            "Thu 1 Jan 01:00: backed up 01:30, 3.2 GB copied",
+        ])
+    }
+
+    @Test func aBackupMinutesBeforeOneWithASizeDoesNotTakeIt() async {
+        // A backup made while BackMeUp wasn't open, three minutes before BackMeUp's own began.
+        let harness = harnessWithNetworkDisk(snapshots: [Self.minutes(-3)])
+        harness.system.storedHistory = BackupHistory(lastSuccess: Self.minutes(-60))
+        harness.changeSettings { $0.backupInterval = .init(count: 1, unit: .hours) }
+        scriptBackup(harness, totalBytes: 3_200_000_000)
+        harness.system.nextBackup = .lasting(minutes: 5)
+        harness.system.nextBackup.snapshotMinutesAfterStart = 0
+
+        await harness.restart() // backs up 00:00 to 00:05, dated 00:00 by Time Machine
+        await harness.advance(minutes: 10)
+
+        #expect(captions(harness).suffix(2) == [
+            "Wed 31 Dec 23:00: backed up 23:57",
+            "Thu 1 Jan 00:00: backed up 00:05, 3.2 GB copied",
+        ])
+    }
+
     @Test func aFailedBackupKeepsNoSize() async {
         let harness = harnessWithNetworkDisk()
         scriptBackup(harness, totalBytes: 3_200_000_000, result: 19)
