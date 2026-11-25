@@ -247,10 +247,7 @@ public struct BackupHistory: Codable, Equatable, Sendable {
         tally.add(attempt)
         storedSinceLastSuccess = tally
         attempts.append(attempt)
-        if let cutoff = calendar.date(byAdding: .weekOfYear, value: -Self.keptWeeks, to: now) {
-            attempts.removeAll { $0.started < cutoff }
-        }
-        dropSizes(before: now, calendar: calendar)
+        dropOlderThanKeptWeeks(now: now, calendar: calendar)
         if attempts.count > Self.maximumAttempts {
             attempts.removeFirst(attempts.count - Self.maximumAttempts)
         }
@@ -266,19 +263,23 @@ extension BackupHistory {
     /// that finished more than `keptWeeks` before `now`.
     mutating func recordSize(_ bytes: Int64, finished: Date, now: Date, calendar: Calendar) {
         sizes = (sizes ?? []) + [BackupSize(finished: finished, bytes: bytes)]
-        dropSizes(before: now, calendar: calendar)
+        dropOlderThanKeptWeeks(now: now, calendar: calendar)
     }
 
-    private mutating func dropSizes(before now: Date, calendar: Calendar) {
-        guard sizes != nil, let cutoff = calendar.date(byAdding: .weekOfYear, value: -Self.keptWeeks, to: now) else { return }
+    /// Drops attempts that started, and sizes of backups that finished, more than `keptWeeks`
+    /// before `now`.
+    private mutating func dropOlderThanKeptWeeks(now: Date, calendar: Calendar) {
+        guard let cutoff = calendar.date(byAdding: .weekOfYear, value: -Self.keptWeeks, to: now) else { return }
+        attempts.removeAll { $0.started < cutoff }
         sizes?.removeAll { $0.finished < cutoff }
     }
 }
 
 /// How much one finished backup copied: Time Machine's total for it, as last seen while copying.
 public struct BackupSize: Codable, Equatable, Sendable {
-    /// When the backup finished: BackMeUp's finish time for its own backups, Time Machine's
-    /// snapshot date for ones Time Machine started itself.
+    /// A time the backup's dot can show: BackMeUp's finish time for its own backups, and Time
+    /// Machine's snapshot date for every backup (which may be when it began). BackMeUp's own
+    /// backups have a size noted at each.
     public var finished: Date
     public var bytes: Int64
 
