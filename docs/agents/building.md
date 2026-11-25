@@ -14,7 +14,7 @@ Everything builds with the Command Line Tools alone (`xcode-select --install`). 
 
 | Path | What's there |
 |---|---|
-| `Sources/BackMeUpCore` | Everything testable: the System port (`System.swift`), the real adapter (`RealSystem*.swift`), output parsers and the `Scheduler`. The scheduler reaches the port only through `UninstallableSystem`, which drops every save, backup start and message after Uninstall…, so new save paths need no guard of their own. Pure helpers it uses: `MenuText` (the menu's lines), `BackupStripText` (the menu's strip of dots and their captions), `BackupVerdict` (how a finished backup is judged), `AlertPolicy`, `NtfySender` |
+| `Sources/BackMeUpCore` | Everything testable: the System port (`System.swift`), the real adapter (`RealSystem*.swift`), output parsers and the `Scheduler`. The scheduler reaches the port only through `UninstallableSystem`, which drops every save, backup start and message after Uninstall…, so new save paths need no guard of their own. Pure helpers it uses: `MenuText` (the menu's lines), `BackupStripText` (the menu's strip of dots and their captions), `SizeText` (sizes in bytes as Finder writes them), `BackupVerdict` (how a finished backup is judged), `AlertPolicy`, `NtfySender` |
 | `Sources/BackMeUp` | The menu bar app. Thin: it ticks the scheduler on a timer and draws what it says. The Settings window is plain AppKit. `AppUpdater` wraps Sparkle, the only target that links it |
 | `Tests/BackMeUpCoreTests` | Swift Testing tests |
 | `Tests/BackMeUpCoreTests/Support` | `FakeSystem` and `SchedulerHarness`, the main test point |

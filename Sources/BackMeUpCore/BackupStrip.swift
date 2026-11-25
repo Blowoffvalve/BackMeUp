@@ -92,7 +92,7 @@ struct BackupStripText {
                 self.slot(slotInterval, unit, kind, isCurrent: isCurrent, what)
             }
             if let latest = successes.last(where: { $0 >= slotInterval.start && $0 < slotInterval.end }) {
-                let copied = size(of: latest).map { ", \(BackupProgress.sizeText(bytes: $0)) copied" } ?? ""
+                let copied = size(of: latest).map { ", \(SizeText.describe(bytes: $0)) copied" } ?? ""
                 return slot(.backedUp) { "backed up \(format(latest, $0.backupTime))\(copied)" }
             }
             // With no success in the slot, the last success before any point in it is the last
