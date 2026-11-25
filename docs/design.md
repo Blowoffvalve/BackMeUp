@@ -21,7 +21,7 @@ The `Scheduler` is the core. Everything outside the app goes through the **Syste
 4. asks once per network whether to allow a new network (see Networks)
 5. holds or releases sleep prevention
 6. starts a backup if one is due and none is running, BackMeUp's or Time Machine's own
-7. checks alerts and updates the menu's lines, including the backup strip (`BackupStripText`): a dot per recent hour, day or week (the backup interval's unit) saying whether it was backed up, failed, was skipped or had nothing due, with a hover caption saying why
+7. checks alerts and updates the menu's lines, including the backup strip (`BackupStripText`): a dot per recent hour, day or week (the backup interval's unit) saying whether it was backed up, failed, was skipped or had nothing due, with a hover caption saying why, and how much a backup copied when BackMeUp watched it finish ("backed up 09:14, 3.2 GB copied")
 
 **When a backup is due:** the backup interval (hours, days or weeks) after the last success, or straight away if there's never been one. After a failure, skip or pause, no sooner than the retry interval (minimum 15 minutes) after that attempt. Three shortcuts skip the retry wait when a backup is already due by the interval: the Mac comes back to a chosen network after a network skip, the checklist starts allowing backups after a setup skip, or another disk's backup ends after Back Up Now was skipped for it.
 
@@ -35,6 +35,8 @@ The `Scheduler` is the core. Everything outside the app goes through the **Syste
 6. then `tmutil startbackup --auto --block` (with `--destination <ID>` for a disk chosen from several), judged by the success rule. If Time Machine's `RESULT` is 18 (it couldn't reach the network disk, for example just after login while a VPN is still starting) and there's no new snapshot, the attempt is a skip ("network backup disk not reachable"), not a failure
 
 Skips never count as failures. Each attempt is recorded in `BackupHistory` with its outcome: succeeded, failed (with a reason), skipped (with a reason) or paused. History keeps every attempt from the last 12 weeks (as far back as the backup strip goes), at most 3,000, plus a running tally since the last success (`SinceLastSuccess`) so alert counts stay right however many attempts are dropped.
+
+**Backup sizes:** while a backup to the chosen disk is copying, whoever started it, the scheduler keeps the last total Time Machine gives (`totalBytes` in `tmutil status -X`; bytes copied aren't used, because Time Machine's percent isn't their ratio). When BackMeUp's own backup succeeds, the total is stored in `BackupHistory.sizes` with the attempt's finish time. When a backup Time Machine started itself ends and a newer backup has appeared on the chosen disk, it's stored with that backup's snapshot date; with none, it was stopped or failed and nothing is kept. A failed or paused attempt keeps nothing, so a resumed first backup shows only the finishing run's total. Nothing is noted for a backup Time Machine says went to another disk. Sizes are trimmed to 12 weeks like attempts. A backed-up dot shows the size noted nearest its time, within 5 minutes (`BackupStripText.sizeMatchWindow`): both are noted as the backup ends, so a size never lands on a different backup. Dots with no size noted keep their plain caption.
 
 **Several Time Machine disks:** `DestinationInfo` lists every disk. With two or more and none chosen, BackMeUp always asks: check 1 fails with a "Back up to" pop-up (also in Settings) and attempts skip with "setup isn't finished". The chosen disk's `ID` is saved as `BackupSettings.destinationID`, and checks 1, 3 and 6, the network rule, the success rule and the `--destination` all follow it. `DiskChoiceState` owns the rules for changing the choice; the scheduler applies each change and saves it.
 
@@ -52,12 +54,12 @@ An unreadable `destinationinfo` changes nothing.
 | Stage | Chosen disk | First backup | Another disk |
 |---|---|---|---|
 | Getting ready: `Starting…`, `Mounting…`, `HealthCheck…`, `Calculating…`, `Finding…`, `Preparing…`; or a backup BackMeUp started, before Time Machine reports it running | Getting ready to back up | Getting ready for first backup | Time Machine is getting ready to back up to another disk |
-| `Copying`, percent known | Backing up: 4.5%, about 3 hours left | First backup: 4.5%, about 3 hours left | Time Machine is backing up to another disk |
+| `Copying`, percent known | Backing up: 4.5% of 251.55 GB, about 3 hours left | First backup: 4.5% of 251.55 GB, about 3 hours left | Time Machine is backing up to another disk |
 | `Copying`, no percent yet | Backing up | First backup | Time Machine is backing up to another disk |
 | `Thinning…` | Time Machine is cleaning up old backups | same | Time Machine is cleaning up another disk |
 | Running, with any other name or none (BackMeUp's own backups too) | Time Machine is working on a backup | Time Machine is working on the first backup | Time Machine is working on another disk |
 
-"First backup" shows until a backup has succeeded. The percent and time left show only while copying, once Time Machine gives them. Each change of stage name is logged as `Phase: <old> -> <new>` ("none" for no name), so names the table doesn't cover yet show up in the log.
+"First backup" shows until a backup has succeeded. The percent, total and time left show only while copying, once Time Machine gives them; without a total the line is "Backing up: 4.5%, …". The total is in decimal units as Finder shows them. The current dot's caption shows the same figure: "Thu 1 Jan: backing up: 4.5% of 251.55 GB". Each change of stage name is logged as `Phase: <old> -> <new>` ("none" for no name), so names the table doesn't cover yet show up in the log.
 
 ## The System port
 
