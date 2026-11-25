@@ -883,7 +883,7 @@ public final class Scheduler {
               !isTimeMachineRunningToChosenDisk
         else { return }
         watchedBackup = nil
-        guard isChosenDisk(watched.destinationID), !isUninstalled,
+        guard mayBeChosenDisk(watched.destinationID), !isUninstalled,
               let newestBefore = watched.newestBackupBefore,
               let newest = chosenDiskBackups.max(), newest > newestBefore
         else { return }
@@ -891,9 +891,10 @@ public final class Scheduler {
         system.saveHistory(history)
     }
 
-    /// Whether a backup Time Machine said went to `id` went to the disk whose backups the strip
-    /// counts. A disk Time Machine didn't name, or the only one when the disks can't be read, is.
-    private func isChosenDisk(_ id: String?) -> Bool {
+    /// Whether a backup Time Machine said went to `id` may have gone to the disk whose backups the
+    /// strip counts: it did, or Time Machine didn't name a disk, or the disks can't be read (so
+    /// the only one is taken as chosen).
+    private func mayBeChosenDisk(_ id: String?) -> Bool {
         switch destination {
         case let .configured(disk)?: id == nil || id == disk.id
         case .unknown?: true
@@ -908,7 +909,7 @@ public final class Scheduler {
     private func noteSizeOfOwnBackup(_ attempt: BackupAttempt) {
         switch attempt.outcome {
         case .succeeded:
-            if let watched = watchedBackup, isChosenDisk(watched.destinationID) {
+            if let watched = watchedBackup, mayBeChosenDisk(watched.destinationID) {
                 for finished in Set([attempt.finished] + [watched.newBackup].compactMap { $0 }).sorted() {
                     history.recordSize(watched.totalBytes, finished: finished, now: system.now, calendar: calendar)
                 }
