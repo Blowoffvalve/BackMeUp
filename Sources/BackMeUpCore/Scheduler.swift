@@ -51,12 +51,20 @@ public final class Scheduler {
     /// The last stage name Time Machine gave, nil for none, to log when it changes.
     private var lastPhaseName: String?
     private var progress: BackupProgress?
-    /// The running backup to the chosen disk: its total, as last seen while copying; the disk Time
-    /// Machine named for it; and the newest backup on the disk at the first checklist reading after
-    /// it was seen (`.distantPast` for none, nil before that reading), to tell whether a new one
-    /// appears when it ends. Stored as the backup's size once it succeeds;
-    /// dropped if it doesn't.
-    private var watchedBackup: (totalBytes: Int64, destinationID: String?, newestBackupBefore: Date?)?
+    /// The running backup to the chosen disk, seen copying. Stored as the backup's size once it
+    /// succeeds; dropped if it doesn't.
+    private var watchedBackup: WatchedBackup?
+
+    private struct WatchedBackup {
+        /// Time Machine's total, as last seen while copying.
+        var totalBytes: Int64
+        /// The disk Time Machine named for it.
+        var destinationID: String?
+        /// The newest backup on the disk at the first checklist reading after it was seen
+        /// (`.distantPast` for none, nil before that reading), to tell whether a new one appears
+        /// when it ends.
+        var newestBackupBefore: Date?
+    }
     /// The first progress seen in the running backup, to estimate the time left from.
     private var progressStart: (date: Date, fraction: Double)?
     private var backupTask: Task<Void, Never>?
@@ -853,9 +861,12 @@ public final class Scheduler {
         }
         if case let .running(runningTo, _) = timeMachineStatus, timeMachineStatus.stage == .copying,
            let totalBytes = progress?.totalBytes {
-            // Unknown until a checklist reading has found the disk's backups; see `readChecklist`.
-            let newestBefore = watchedBackup?.newestBackupBefore
-            watchedBackup = (totalBytes, runningTo, newestBefore)
+            // The newest backup before stays unknown until a checklist reading has found the
+            // disk's backups; see `readChecklist`.
+            watchedBackup = WatchedBackup(
+                totalBytes: totalBytes, destinationID: runningTo,
+                newestBackupBefore: watchedBackup?.newestBackupBefore
+            )
         }
     }
 
