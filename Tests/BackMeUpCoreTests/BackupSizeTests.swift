@@ -27,7 +27,9 @@ struct BackupSizeTests {
         harness.system.backupProgress = BackupProgress(fraction: 0.5, totalBytes: totalBytes)
     }
 
-    var today: (SchedulerHarness) -> BackupStrip.Slot? { { $0.scheduler.backupStrip.slots.last } }
+    func today(_ harness: SchedulerHarness) -> BackupStrip.Slot? {
+        harness.scheduler.backupStrip.slots.last
+    }
 
     @Test func afterABackupFinishesItsDotSaysHowMuchItCopied() async {
         let harness = harnessWithNetworkDisk()
@@ -195,7 +197,7 @@ struct BackupSizeTests {
         #expect(today(harness)?.caption == "Thu 1 Jan: backed up 00:30, 3.2 GB copied")
     }
 
-    @Test func aDotWithNoKnownSizeKeepsTodaysCaption() async {
+    @Test func aBackupWithNoKnownSizeKeepsItsPlainCaption() async {
         let harness = harnessWithNetworkDisk(snapshots: [Self.minutes(-24 * 60 + 9 * 60 + 14)]) // Wed 31 Dec 09:14
         scriptBackup(harness, totalBytes: 3_200_000_000)
 
