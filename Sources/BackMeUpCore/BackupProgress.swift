@@ -20,6 +20,17 @@ public struct BackupProgress: Equatable, Sendable {
     public var percentText: String {
         String(format: "%.1f%%", locale: Locale(identifier: "en_US_POSIX"), fraction * 100)
     }
+
+    /// "20.8% of 251.55 GB" once Time Machine gives a total, else "20.8%". Only the total is
+    /// shown, never bytes copied: Time Machine's percent is its progress bar, not their ratio.
+    public var progressText: String {
+        totalBytes.map { "\(percentText) of \(Self.sizeText(bytes: $0))" } ?? percentText
+    }
+
+    /// "251.55 GB", "840 MB": decimal units, as Finder shows file sizes.
+    public static func sizeText(bytes: Int64) -> String {
+        bytes.formatted(.byteCount(style: .file).locale(Locale(identifier: "en_US_POSIX")))
+    }
 }
 
 extension BackupProgress {

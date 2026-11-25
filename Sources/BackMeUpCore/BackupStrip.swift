@@ -108,7 +108,7 @@ struct BackupStripText {
         }
         if isBackingUp, let current = slotIntervals.last, let kind = slots.last?.kind {
             // The same figure as the status line, after the slot's date like every caption.
-            let what = progress.map { "backing up: \($0.percentText)" } ?? "backing up"
+            let what = progress.map { "backing up: \($0.progressText)" } ?? "backing up"
             slots[slots.count - 1] = slot(current, unit, kind, isCurrent: true) { _ in what }
         }
         let backedUp = slots.filter { $0.kind == .backedUp }.count

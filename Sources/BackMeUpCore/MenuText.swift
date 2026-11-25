@@ -115,12 +115,12 @@ struct MenuText {
         }
     }
 
-    /// While copying: "First backup: 35.0%, about 3 hours left", or "Backing up" before Time
+    /// While copying: "First backup: 35.0% of 251.55 GB, about 3 hours left", or "Backing up" before Time
     /// Machine gives a percent.
     private var progressLine: String {
         let label = isFirstBackup ? "First backup" : "Backing up"
         guard let progress else { return label }
-        let percent = "\(label): \(progress.percentText)"
+        let percent = "\(label): \(progress.progressText)"
         return timeLeft.map { "\(percent), \(Self.describe(timeLeft: $0))" } ?? percent
     }
 
