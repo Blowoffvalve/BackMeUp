@@ -52,8 +52,9 @@ public final class Scheduler {
     private var lastPhaseName: String?
     private var progress: BackupProgress?
     /// The running backup to the chosen disk: its total, as last seen while copying; the disk Time
-    /// Machine named for it; and the newest backup on the disk when it was first seen, to tell
-    /// whether a new one appears when it ends. Stored as the backup's size once it succeeds;
+    /// Machine named for it; and the newest backup on the disk at the first checklist reading after
+    /// it was seen (`.distantPast` for none, nil before that reading), to tell whether a new one
+    /// appears when it ends. Stored as the backup's size once it succeeds;
     /// dropped if it doesn't.
     private var watchedBackup: (totalBytes: Int64, destinationID: String?, newestBackupBefore: Date?)?
     /// The first progress seen in the running backup, to estimate the time left from.
@@ -238,7 +239,13 @@ public final class Scheduler {
             linkFailed: linkFailed
         ))
         self.checklist = checklist
-        chosenDiskBackups = Self.chosenDisk(in: preferences, destination)?.snapshotDates ?? []
+        let chosenDiskEntry = Self.chosenDisk(in: preferences, destination)
+        chosenDiskBackups = chosenDiskEntry?.snapshotDates ?? []
+        // The disk's backups are known only now, so a backup first seen before this reading (as
+        // when BackMeUp launches mid-backup) gets its starting point here.
+        if chosenDiskEntry != nil, watchedBackup != nil, watchedBackup?.newestBackupBefore == nil {
+            watchedBackup?.newestBackupBefore = chosenDiskBackups.max() ?? .distantPast
+        }
         let diskCheckPassed = checklist.item(.diskSetUp)?.state == .passed
         disks = reading.disks.map { disk in
             ListedDisk(
@@ -846,7 +853,8 @@ public final class Scheduler {
         }
         if case let .running(runningTo, _) = timeMachineStatus, timeMachineStatus.stage == .copying,
            let totalBytes = progress?.totalBytes {
-            let newestBefore = watchedBackup.map(\.newestBackupBefore) ?? chosenDiskBackups.max()
+            // Unknown until a checklist reading has found the disk's backups; see `readChecklist`.
+            let newestBefore = watchedBackup?.newestBackupBefore
             watchedBackup = (totalBytes, runningTo, newestBefore)
         }
     }
@@ -860,7 +868,8 @@ public final class Scheduler {
         else { return }
         watchedBackup = nil
         guard isChosenDisk(watched.destinationID), !isUninstalled,
-              let newest = chosenDiskBackups.max(), newest > watched.newestBackupBefore ?? .distantPast
+              let newestBefore = watched.newestBackupBefore,
+              let newest = chosenDiskBackups.max(), newest > newestBefore
         else { return }
         history.recordSize(watched.totalBytes, finished: newest, now: system.now, calendar: calendar)
         system.saveHistory(history)

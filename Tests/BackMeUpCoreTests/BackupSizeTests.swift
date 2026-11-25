@@ -86,6 +86,22 @@ struct BackupSizeTests {
         #expect(today(harness)?.caption == "Thu 1 Jan: backed up 00:50")
     }
 
+    @Test func aBackupStoppedAfterLaunchingMidBackupKeepsNone() async {
+        // BackMeUp launches while Time Machine is already copying, so it first sees the backup
+        // before it has read the disk's backups.
+        let harness = harnessWithNetworkDisk(snapshots: [Self.minutes(-60)])
+        harness.system.storedHistory = BackupHistory(lastSuccess: Self.minutes(-60)) // nothing due
+        harness.system.timeMachineStatus = .running(destinationID: "network-id", phase: "Copying")
+        harness.system.backupProgress = BackupProgress(fraction: 0.5, totalBytes: 840_000_000)
+        harness.at(minutes: 30) { $0.timeMachineStatus = .idle } // stopped: no new backup
+
+        await harness.restart()
+        await harness.advance(minutes: 60)
+
+        #expect(captions(harness).filter { $0.contains("copied") } == [])
+        #expect(harness.system.storedHistory?.sizes ?? [] == [])
+    }
+
     @Test func aResumedFirstBackupShowsWhatTheFinishingRunCopied() async {
         let harness = harnessWithNetworkDisk()
         harness.changeSettings { $0.retryMinutes = 60 }
