@@ -6,10 +6,14 @@ public struct BackupProgress: Equatable, Sendable {
     public var fraction: Double
     /// Time Machine's own estimate, in seconds, when it gives one.
     public var timeRemaining: TimeInterval?
+    /// The backup's total size in bytes (`totalBytes`), once Time Machine has worked it out. nil
+    /// before copying starts.
+    public var totalBytes: Int64?
 
-    public init(fraction: Double, timeRemaining: TimeInterval? = nil) {
+    public init(fraction: Double, timeRemaining: TimeInterval? = nil, totalBytes: Int64? = nil) {
         self.fraction = fraction
         self.timeRemaining = timeRemaining
+        self.totalBytes = totalBytes
     }
 
     /// "20.8%", with one decimal as Time Machine's menu shows it.
@@ -27,7 +31,8 @@ extension BackupProgress {
     /// `FractionOfProgressBar` 0.9 showed as "20.8% done" (10% + 0.9 x 11.97%).
     ///
     /// The format is undocumented. In the Copying phase on macOS 27.2, `Progress` held `Percent`
-    /// (a fraction) and sometimes `TimeRemaining` (seconds), with no top-level `Percent`.
+    /// (a fraction) and sometimes `TimeRemaining` (seconds), with no top-level `Percent`. It also held
+    /// `totalBytes`, the backup's total; a missing or non-positive one means no total, never zero.
     public init?(statusOutput: String) {
         guard let status = PlistDictionary(statusOutput), status.bool("Running") == true else { return nil }
         let details = status.dictionary("Progress")
@@ -35,7 +40,12 @@ extension BackupProgress {
               (0...1).contains(fraction)
         else { return nil }
         let timeRemaining = details?.double("TimeRemaining") ?? status.double("TimeRemaining")
-        self.init(fraction: Self.progressBarFraction(percent: fraction, share: status.double("FractionOfProgressBar")), timeRemaining: timeRemaining.flatMap { $0 >= 0 ? $0 : nil })
+        let totalBytes = details?.double("totalBytes").flatMap { $0 > 0 ? Int64(exactly: $0.rounded()) : nil }
+        self.init(
+            fraction: Self.progressBarFraction(percent: fraction, share: status.double("FractionOfProgressBar")),
+            timeRemaining: timeRemaining.flatMap { $0 >= 0 ? $0 : nil },
+            totalBytes: totalBytes
+        )
     }
 
     /// Where `percent` of a phase that fills the last `share` of the bar puts the bar. Without a
