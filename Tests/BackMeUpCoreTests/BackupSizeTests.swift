@@ -18,8 +18,8 @@ struct BackupSizeTests {
         return harness
     }
 
-    /// Scripts the next backup BackMeUp starts to copy `bytes` in total and end as `outcome`
-    /// after 30 minutes.
+    /// Scripts the next backup BackMeUp starts to copy `totalBytes` in total and end with
+    /// `exitCode` and `result` after 30 minutes.
     func scriptBackup(_ harness: SchedulerHarness, totalBytes: Int64,
                       exitCode: Int32? = 0, result: Int? = 0) {
         harness.system.nextBackup = .lasting(minutes: 30, exitCode: exitCode, result: result)
