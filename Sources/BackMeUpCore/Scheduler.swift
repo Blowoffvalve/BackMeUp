@@ -64,6 +64,9 @@ public final class Scheduler {
         /// (`.distantPast` for none, nil before that reading), to tell whether a new one appears
         /// when it ends.
         var newestBackupBefore: Date?
+        /// The date Time Machine gave the backup it left on the disk, once BackMeUp's own backup
+        /// has succeeded. It may be when the backup began, hours before it finished.
+        var newBackup: Date?
     }
     /// The first progress seen in the running backup, to estimate the time left from.
     private var progressStart: (date: Date, fraction: Double)?
@@ -722,6 +725,7 @@ public final class Scheduler {
            await isTimeMachineStuck(disk: disk, commandStarted: commandStarted) {
             outcome = .failed(.timeMachineStuck(afterRestart: recordStuck(since: started)))
         }
+        if outcome == .succeeded { watchedBackup?.newBackup = verdict.after?.latestSnapshot }
         return BackupAttempt(started: started, finished: system.now, outcome: outcome)
     }
 
@@ -896,13 +900,17 @@ public final class Scheduler {
         }
     }
 
-    /// BackMeUp's own backup has ended as `outcome`: notes its size if it succeeded. A failed or
-    /// paused backup keeps none; a resumed one is noted afresh from its own run.
+    /// BackMeUp's own backup has ended as `attempt`: notes its size if it succeeded, against both
+    /// times its dot can show, the attempt's finish and Time Machine's date for the new backup,
+    /// so neither depends on how far apart they are. A failed or paused backup keeps none; a
+    /// resumed one is noted afresh from its own run.
     private func noteSizeOfOwnBackup(_ attempt: BackupAttempt) {
         switch attempt.outcome {
         case .succeeded:
             if let watched = watchedBackup, isChosenDisk(watched.destinationID) {
-                history.recordSize(watched.totalBytes, finished: attempt.finished, now: system.now, calendar: calendar)
+                for finished in Set([attempt.finished] + [watched.newBackup].compactMap { $0 }).sorted() {
+                    history.recordSize(watched.totalBytes, finished: finished, now: system.now, calendar: calendar)
+                }
             }
             watchedBackup = nil
         case .failed, .paused:

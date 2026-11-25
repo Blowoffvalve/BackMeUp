@@ -120,12 +120,14 @@ struct BackupStripText {
         )
     }
 
-    /// How far apart a backup's time and a noted size's can be and still be the same backup. Both
-    /// are noted when the backup ends, so they're seconds apart at most; backups are never this
-    /// close together, so a size is never shown against a different backup.
-    static let sizeMatchWindow: TimeInterval = 5 * 60
+    /// How far apart a backup's time and a noted size's can be and still be the same backup. A
+    /// size is noted at every time its backup's dot can show (BackMeUp's finish time and Time
+    /// Machine's date for the backup, which may be when it began, hours earlier), so the times
+    /// match exactly; this only allows for rounding. A wider window could give a backup with no
+    /// size a neighbour's.
+    static let sizeMatchWindow: TimeInterval = 1
 
-    /// How much the backup that finished at `backup` copied: the noted size nearest to it, within
+    /// How much the backup at `backup` copied: the noted size at its time, within
     /// `sizeMatchWindow`. nil when BackMeUp didn't watch it finish.
     private func size(of backup: Date) -> Int64? {
         (history.sizes ?? [])
